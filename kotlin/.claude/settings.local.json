@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -c /home/higuera/Documents/projects/tutoriales/kotlin/*.md)"
+    ]
+  }
+}
