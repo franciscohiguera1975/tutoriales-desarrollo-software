@@ -1,89 +1,313 @@
-# Curso React.js + TypeScript — Página 12
-## Módulo 6 · Ecosistema
-### Formularios y validación: controlados, validación manual y Zod v4
+# Curso React.js + TypeScript — Página 10
+## Módulo 5 · Arquitectura
+### React Router v7: navegación, rutas anidadas y rutas protegidas
 
 ---
 
-## Formularios en React: controlados vs no controlados
+## ¿Qué es React Router?
 
-En React hay dos enfoques para manejar formularios:
+React Router es la librería estándar para manejar navegación en aplicaciones
+React. Permite mostrar distintos componentes según la URL sin recargar la página
+— comportamiento de **Single Page Application (SPA)**.
 
-| Enfoque | Quién controla el valor | Cuándo usarlo |
-|---|---|---|
-| **Controlado** | React (el estado) | La mayoría de los casos — formularios con validación, valores que dependen entre sí |
-| **No controlado** | El DOM | Formularios muy simples, subida de archivos, integración con librerías externas |
+La versión instalada con `npm install react-router-dom` hoy es la **v7**,
+que mantiene la misma API de componentes de v6 y añade soporte para
+data loading y server rendering. En este módulo cubrimos la API
+de componentes — la más común en proyectos SPA.
 
-El curso usa formularios **controlados** — el valor de cada campo vive
-en el estado de React y se sincroniza con el DOM mediante `value` + `onChange`.
-
----
-
-## Instalación de Zod
+### Instalación
 
 ```bash
-npm install zod
+npm install react-router-dom
 ```
 
-La versión actual es **Zod v4** — tiene cambios de API respecto a v3.
-El curso usa v4 directamente.
+No necesitas instalar tipos por separado — `react-router-dom` v7
+incluye sus propias definiciones TypeScript.
 
 ---
 
-## Formulario controlado básico
+## Estructura de archivos
 
-El patrón mínimo: un estado por campo, un `onChange` que lo actualiza,
-un `onSubmit` que previene el comportamiento nativo y procesa los datos.
+```
+src/
+├── pages/              ← un archivo por página/vista
+│   ├── HomePage.tsx
+│   ├── AboutPage.tsx
+│   ├── ProductsPage.tsx
+│   ├── ProductDetailPage.tsx
+│   ├── DashboardPage.tsx
+│   ├── LoginPage.tsx
+│   └── NotFoundPage.tsx
+├── layouts/            ← componentes con <Outlet>
+│   ├── RootLayout.tsx
+│   └── DashboardLayout.tsx
+├── components/
+└── main.tsx
+```
+
+---
+
+## Configuración inicial en `main.tsx`
 
 ```tsx
-// src/components/BasicForm.tsx
+// src/main.tsx
 
-import { useState } from 'react'
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
+import './index.css'
+import App from './App.tsx'
 
-export default function BasicForm() {
-  const [name,  setName]  = useState('')
-  const [email, setEmail] = useState('')
-  const [error, setError] = useState<string | null>(null)
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </StrictMode>,
+)
+```
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()   // evita que la página se recargue
+`BrowserRouter` envuelve toda la aplicación en `main.tsx` —
+no en `App.tsx` — para que todos los componentes puedan acceder
+a los hooks del router.
 
-    if (!name.trim() || !email.includes('@')) {
-      setError('Completa todos los campos correctamente')
-      return
-    }
+### Prueba esto
 
-    setError(null)
-    console.log('Datos enviados:', { name, email })
-    // aquí iría el fetch a la API
+- Mueve `<BrowserRouter>` de `main.tsx` al interior de `App()` y llama a `useNavigate()` en cualquier componente hijo — observa el error `useNavigate() may be used only in the context of a <Router> component`
+- Elimina `<BrowserRouter>` por completo, guarda y navega a `/about` — observa que la URL cambia pero `<Routes>` no renderiza nada o lanza un error de contexto faltante
+- Añade `<React.StrictMode>` si aún no está y observa en la consola que los efectos se ejecutan dos veces en desarrollo — comportamiento esperado y deliberado
+- Cambia `BrowserRouter` por `HashRouter` (importado de `react-router-dom`) y observa que la URL pasa de `localhost:5173/about` a `localhost:5173/#/about`
+- Abre las DevTools de red, recarga la página y observa que solo se descarga un archivo HTML — confirmando que React Router maneja la navegación sin peticiones al servidor
+
+---
+
+## Rutas básicas con `Routes` y `Route`
+
+```tsx
+// src/App.tsx
+
+import { Routes, Route } from 'react-router-dom'
+import HomePage     from './pages/HomePage'
+import AboutPage    from './pages/AboutPage'
+import NotFoundPage from './pages/NotFoundPage'
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/"       element={<HomePage />} />
+      <Route path="/about"  element={<AboutPage />} />
+      <Route path="*"       element={<NotFoundPage />} />
+    </Routes>
+  )
+}
+```
+
+- `path="/"` — coincide exactamente con la raíz.
+- `path="*"` — captura cualquier ruta no definida arriba — siempre al final.
+- `element` — el componente que se renderiza cuando la URL coincide.
+
+### Prueba esto
+
+- Escribe `/about` directamente en la barra de URL — observa que `AboutPage` se renderiza sin recargar el HTML del servidor
+- Escribe `/ruta-inexistente` en la URL — observa que `NotFoundPage` se renderiza porque `path="*"` captura todo lo que no coincide
+- Mueve `<Route path="*">` al principio del árbol (antes de `/about`) — observa que ahora cualquier URL renderiza `NotFoundPage` porque `*` captura primero
+- Elimina `<Route path="*">` y navega a una ruta inexistente — observa que la pantalla queda en blanco porque no hay ninguna ruta que coincida
+- Cambia `path="/"` por `path="/home"` y navega a `/` — observa que queda en blanco; navega a `/home` y funciona correctamente
+
+---
+
+## Navegación: `Link` y `NavLink`
+
+### `src/layouts/RootLayout.tsx`
+
+```tsx
+// src/layouts/RootLayout.tsx
+
+import { Link, NavLink, Outlet } from 'react-router-dom'
+
+export default function RootLayout() {
+  return (
+    <div style={{ fontFamily: 'sans-serif' }}>
+      <header style={{
+        display: 'flex', alignItems: 'center', gap: 24,
+        padding: '12px 24px', borderBottom: '1px solid #e5e7eb',
+      }}>
+        <Link
+          to="/"
+          style={{ fontWeight: 700, fontSize: 18, textDecoration: 'none', color: '#111' }}
+        >
+          Mi App
+        </Link>
+
+        <nav style={{ display: 'flex', gap: 16 }}>
+          {[
+            { to: '/',        label: 'Inicio'    },
+            { to: '/products', label: 'Productos' },
+            { to: '/about',   label: 'Acerca de' },
+          ].map(({ to, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === '/'}  // evita que "/" quede activo en todas las rutas
+              style={({ isActive }) => ({
+                textDecoration: 'none',
+                fontWeight:   isActive ? 600   : 400,
+                color:        isActive ? '#0070f3' : '#6b7280',
+                borderBottom: isActive ? '2px solid #0070f3' : '2px solid transparent',
+                paddingBottom: 4,
+              })}
+            >
+              {label}
+            </NavLink>
+          ))}
+        </nav>
+      </header>
+
+      <main style={{ maxWidth: 720, margin: '32px auto', padding: '0 16px' }}>
+        <Outlet />  {/* aquí se renderiza la página activa */}
+      </main>
+    </div>
+  )
+}
+```
+
+| Componente | Diferencia |
+|---|---|
+| `<Link to="...">` | Navegación simple — no aplica estilos según la URL activa |
+| `<NavLink to="...">` | Igual pero recibe `{ isActive }` en `style` y `className` |
+
+> `end` en `NavLink` hace que solo esté activo en la ruta exacta,
+> no en rutas hijas. Imprescindible para el enlace raíz `"/"`.
+
+### Prueba esto
+
+- Quita `end` del `NavLink` de `"/"` y navega a `/products` — observa que el enlace "Inicio" sigue resaltado porque `/` es prefijo de todas las rutas
+- Reemplaza un `<NavLink>` por `<a href="/about">` y haz clic — observa en la pestaña de Red de DevTools que el navegador hace una petición GET completa al servidor, recargando la app
+- Cambia la función de `style` en `NavLink` para que también cambie el `background` cuando está activo — observa el cambio visual al navegar entre rutas
+- Navega a `/products` y luego a `/about` sin recargar — observa en el `Outlet` cómo el contenido cambia pero el `header` permanece igual, demostrando que el layout es compartido
+- Abre las DevTools de React y selecciona el componente `RootLayout` — observa que no se desmonta al navegar, solo cambia lo que está dentro de `<Outlet />`
+
+---
+
+## `useParams` — parámetros de URL tipados
+
+```tsx
+// src/pages/ProductDetailPage.tsx
+
+import { useParams, Link } from 'react-router-dom'
+
+// Define el tipo de los parámetros de la URL
+interface ProductParams {
+  id: string   // los params siempre son string — convierte si necesitas número
+}
+
+export default function ProductDetailPage() {
+  const { id } = useParams<ProductParams>()
+
+  // Convierte a número cuando lo necesites
+  const productId = Number(id)
+
+  if (!id || isNaN(productId)) {
+    return <p style={{ color: '#ef4444' }}>ID de producto inválido.</p>
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 320 }}
-    >
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Nombre"
-        style={inputStyle}
-      />
-      <input
-        type="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="Correo electrónico"
-        style={inputStyle}
-      />
+    <div>
+      <Link
+        to="/products"
+        style={{ fontSize: 13, color: '#6b7280', textDecoration: 'none' }}
+      >
+        ← Volver a productos
+      </Link>
+      <h1 style={{ marginTop: 12 }}>Producto #{productId}</h1>
+      <p style={{ color: '#6b7280' }}>
+        Aquí iría el detalle del producto con ID {productId}.
+      </p>
+    </div>
+  )
+}
+```
 
-      {error && (
-        <p style={{ margin: 0, fontSize: 13, color: '#ef4444' }}>{error}</p>
-      )}
+```tsx
+// Ruta que define el parámetro
+<Route path="/products/:id" element={<ProductDetailPage />} />
 
-      <button type="submit" style={submitBtn}>
-        Enviar
-      </button>
-    </form>
+// Link que navega al detalle
+<Link to={`/products/${product.id}`}>Ver detalle</Link>
+```
+
+### Prueba esto
+
+- Navega a `/products/abc` — observa que `Number('abc')` produce `NaN` y se muestra el mensaje de ID inválido
+- Navega a `/products/3` — observa que `id` es el string `"3"` (no el número `3`); añade un `console.log(typeof id)` para confirmarlo
+- Elimina la comprobación `isNaN(productId)` y pasa un ID texto — observa que el componente renderiza `Producto #NaN` sin ningún error visible, un bug silencioso
+- Añade un segundo parámetro a la ruta cambiando `path` a `/products/:id/:slug` y observa en `useParams` que ambos parámetros están disponibles como strings
+- Cambia el `<Link to="/products">` del botón de volver por `navigate(-1)` y navega desde distintas páginas — observa que siempre vuelve a la página anterior en el historial, no siempre a `/products`
+
+---
+
+## `useNavigate` — navegación programática
+
+```tsx
+// src/pages/LoginPage.tsx
+
+import { useState }     from 'react'
+import { useNavigate }  from 'react-router-dom'
+
+export default function LoginPage() {
+  const navigate = useNavigate()
+  const [email,    setEmail]    = useState('')
+  const [password, setPassword] = useState('')
+  const [loading,  setLoading]  = useState(false)
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setLoading(true)
+
+    // Simulación de login
+    await new Promise((r) => setTimeout(r, 800))
+
+    // replace: true — reemplaza la entrada en el historial
+    // el usuario no puede volver al login con el botón "atrás"
+    navigate('/dashboard', { replace: true })
+  }
+
+  return (
+    <div style={{ maxWidth: 320, margin: '0 auto' }}>
+      <h1 style={{ fontSize: 22, marginBottom: 20 }}>Iniciar sesión</h1>
+      <form
+        onSubmit={handleSubmit}
+        style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
+      >
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Email"
+          required
+          style={inputStyle}
+        />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Contraseña"
+          required
+          style={inputStyle}
+        />
+        <button
+          type="submit"
+          disabled={loading}
+          style={{
+            padding: '10px', background: loading ? '#93c5fd' : '#0070f3',
+            color: '#fff', border: 'none', borderRadius: 6,
+            cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 500,
+          }}
+        >
+          {loading ? 'Entrando...' : 'Entrar'}
+        </button>
+      </form>
+    </div>
   )
 }
 
@@ -92,737 +316,436 @@ const inputStyle = {
   border: '1px solid #d1d5db',
   borderRadius: 6, fontSize: 14,
 }
+```
 
-const submitBtn = {
-  padding: '10px',
-  background: '#0070f3', color: '#fff',
-  border: 'none', borderRadius: 6,
-  cursor: 'pointer', fontWeight: 500,
-}
+### Métodos de `useNavigate`
+
+```tsx
+const navigate = useNavigate()
+
+navigate('/ruta')                   // navegar hacia adelante
+navigate('/ruta', { replace: true }) // reemplaza — sin entrada en historial
+navigate(-1)                         // volver atrás (como botón del navegador)
+navigate(1)                          // avanzar
+navigate('/ruta', { state: { from: 'login' } }) // pasar estado al destino
 ```
 
 ### Prueba esto
 
-- Haz clic en "Enviar" con los campos vacíos — observa que aparece el mensaje "Completa todos los campos correctamente" en rojo
-- Escribe un nombre válido pero deja el email sin `@` (por ejemplo `usuarioemail.com`) y haz clic en "Enviar" — el mismo mensaje de error aparece porque la validación es conjunta
-- Escribe un email con `@` pero sin dominio (por ejemplo `usuario@`) — el formulario se envía igualmente porque `includes('@')` solo verifica la presencia del símbolo
-- Abre la consola del navegador (F12) y envía el formulario con datos válidos — observa que aparece `Datos enviados: { name: '...', email: '...' }` en la consola
-- Cambia `!email.includes('@')` por `!/^[^@]+@[^@]+\.[^@]+$/.test(email)` en la validación — ahora `usuario@` ya no pasa la validación y el error aparece correctamente
-- Añade un tercer campo `phone` con su propio `useState` y agrega la condición `!phone.trim()` a la validación — el formulario ahora requiere los tres campos
+- Completa el formulario de login y haz clic en "Entrar" — observa cómo después del `await` de 800 ms la URL cambia a `/dashboard` automáticamente sin que el usuario haga clic en ningún enlace
+- Llega al dashboard via login con `replace: true` y presiona el botón "Atrás" del navegador — observa que no vuelve al formulario de login sino a la página anterior al login
+- Cambia `replace: true` por `replace: false` (o quita la opción) y repite — ahora el botón "Atrás" sí vuelve al login
+- Añade `navigate(-1)` en un botón de "Cancelar" en el formulario — observa que navega a la página anterior en el historial del navegador
+- Pasa `state: { username: email }` en el `navigate` y en `/dashboard` usa `useLocation().state` para mostrar "Bienvenido, ana@ejemplo.com" — observa cómo el estado viaja entre rutas sin query params
 
 ---
 
-## Validación manual con TypeScript
-
-Para formularios más complejos conviene separar la lógica de validación
-en una función pura tipada y gestionar el estado de errores y campos
-tocados (touched) por separado.
+## `useLocation` y `useSearchParams`
 
 ```tsx
-// src/components/ManualValidationForm.tsx
+// src/pages/ProductsPage.tsx
 
-import { useState } from 'react'
+import { useState, useMemo }  from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 
-interface FormValues {
+interface Product {
+  id:       number
   name:     string
-  email:    string
-  password: string
+  category: string
+  price:    number
 }
 
-// Partial — cada campo de error es opcional
-type FormErrors = Partial<Record<keyof FormValues, string>>
-type TouchedFields = Partial<Record<keyof FormValues, boolean>>
+const PRODUCTS: Product[] = [
+  { id: 1, name: 'Teclado mecánico',  category: 'periféricos',  price: 89  },
+  { id: 2, name: 'Monitor 27"',       category: 'pantallas',    price: 349 },
+  { id: 3, name: 'Mouse inalámbrico', category: 'periféricos',  price: 29  },
+  { id: 4, name: 'Webcam HD',         category: 'cámaras',      price: 59  },
+  { id: 5, name: 'Auriculares BT',    category: 'audio',        price: 149 },
+]
 
-// Función pura — recibe valores, retorna errores
-function validateForm(values: FormValues): FormErrors {
-  const errors: FormErrors = {}
+export default function ProductsPage() {
+  // useSearchParams sincroniza filtros con la URL
+  // ?q=teclado&category=periféricos queda en la barra del navegador
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  if (!values.name.trim())
-    errors.name = 'El nombre es requerido'
-  else if (values.name.trim().length < 2)
-    errors.name = 'Mínimo 2 caracteres'
+  const query    = searchParams.get('q')        ?? ''
+  const category = searchParams.get('category') ?? ''
 
-  if (!values.email.includes('@'))
-    errors.email = 'Introduce un email válido'
-
-  if (values.password.length < 8)
-    errors.password = 'La contraseña debe tener al menos 8 caracteres'
-
-  return errors
-}
-
-export default function ManualValidationForm() {
-  const [values, setValues] = useState<FormValues>({
-    name: '', email: '', password: '',
-  })
-  const [errors,  setErrors]  = useState<FormErrors>({})
-  const [touched, setTouched] = useState<TouchedFields>({})
-  const [success, setSuccess] = useState(false)
-
-  function handleChange(field: keyof FormValues, value: string) {
-    const newValues = { ...values, [field]: value }
-    setValues(newValues)
-
-    // Valida en tiempo real solo si el campo ya fue tocado (blur)
-    if (touched[field]) {
-      const newErrors = validateForm(newValues)
-      setErrors((prev) => ({ ...prev, [field]: newErrors[field] }))
-    }
+  function handleQueryChange(value: string) {
+    setSearchParams(
+      (prev) => { prev.set('q', value); return prev },
+      { replace: true }
+    )
   }
 
-  function handleBlur(field: keyof FormValues) {
-    setTouched((prev) => ({ ...prev, [field]: true }))
-    const fieldErrors = validateForm(values)
-    setErrors((prev) => ({ ...prev, [field]: fieldErrors[field] }))
+  function handleCategoryChange(value: string) {
+    setSearchParams(
+      (prev) => {
+        if (value) prev.set('category', value)
+        else       prev.delete('category')
+        return prev
+      },
+      { replace: true }
+    )
   }
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-
-    // Valida todos los campos al enviar
-    const allErrors = validateForm(values)
-
-    if (Object.keys(allErrors).length > 0) {
-      setErrors(allErrors)
-      setTouched({ name: true, email: true, password: true })
-      return
-    }
-
-    setSuccess(true)
-    console.log('Datos válidos:', values)
-  }
-
-  const hasErrors = Object.keys(errors).some(
-    (k) => errors[k as keyof FormErrors]
+  const filtered = useMemo(() =>
+    PRODUCTS
+      .filter((p) => p.name.toLowerCase().includes(query.toLowerCase()))
+      .filter((p) => !category || p.category === category),
+    [query, category]
   )
 
-  return (
-    <form
-      onSubmit={handleSubmit}
-      style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 320 }}
-    >
-      {success && (
-        <div style={{ padding: 12, background: '#dcfce7', borderRadius: 6, color: '#166534' }}>
-          ✅ Formulario enviado correctamente
-        </div>
-      )}
-
-      <Field
-        label="Nombre"
-        value={values.name}
-        error={errors.name}
-        placeholder="Tu nombre completo"
-        onChange={(v) => handleChange('name', v)}
-        onBlur={() => handleBlur('name')}
-      />
-
-      <Field
-        label="Email"
-        type="email"
-        value={values.email}
-        error={errors.email}
-        placeholder="tu@email.com"
-        onChange={(v) => handleChange('email', v)}
-        onBlur={() => handleBlur('email')}
-      />
-
-      <Field
-        label="Contraseña"
-        type="password"
-        value={values.password}
-        error={errors.password}
-        placeholder="Mínimo 8 caracteres"
-        onChange={(v) => handleChange('password', v)}
-        onBlur={() => handleBlur('password')}
-      />
-
-      <button
-        type="submit"
-        disabled={success}
-        style={{
-          padding: '10px', background: '#0070f3', color: '#fff',
-          border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 500,
-          opacity: success ? 0.5 : 1,
-        }}
-      >
-        Registrar
-      </button>
-    </form>
-  )
-}
-
-// Componente auxiliar para evitar repetición
-interface FieldProps {
-  label:       string
-  value:       string
-  error?:      string
-  placeholder?: string
-  type?:       string
-  onChange:    (value: string) => void
-  onBlur:      () => void
-}
-
-function Field({ label, value, error, placeholder, type = 'text', onChange, onBlur }: FieldProps) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <label style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={onBlur}
-        placeholder={placeholder}
-        style={{
-          padding: '8px 12px', fontSize: 14,
-          border: `1px solid ${error ? '#ef4444' : '#d1d5db'}`,
-          borderRadius: 6,
-          outline: error ? '2px solid #fecaca' : 'none',
-        }}
-      />
-      {error && (
-        <p style={{ margin: 0, fontSize: 12, color: '#ef4444' }}>{error}</p>
-      )}
-    </div>
-  )
-}
-```
-
-### Prueba esto
-
-- Haz clic en "Registrar" sin tocar ningún campo — observa que los tres errores aparecen al mismo tiempo porque `handleSubmit` valida todos los campos a la vez
-- Haz clic en el campo "Nombre", escribe una letra y luego sal del campo con Tab — observa que el error "Mínimo 2 caracteres" aparece inmediatamente al perder el foco (`onBlur`)
-- Corrige el nombre hasta que sea válido, luego borra una letra — observa que el error reaparece en tiempo real porque el campo ya fue tocado (`touched.name === true`)
-- Cambia `values.password.length < 8` por `values.password.length < 12` en `validateForm` — ahora se requieren mínimo 12 caracteres y el mensaje de error se actualiza
-- Envía el formulario con todos los campos válidos — aparece el banner verde "Formulario enviado correctamente" y el botón se deshabilita (`disabled={success}`)
-- Añade un campo `confirmPassword` al tipo `FormValues` y valida en `validateForm` que coincida con `password` — el error "Las contraseñas no coinciden" aparece si son diferentes
-- Cambia el condicional `if (touched[field])` en `handleChange` por `if (true)` — la validación ocurre en tiempo real desde el primer carácter sin necesidad de salir del campo
-
----
-
-## Validación con Zod v4
-
-Zod valida datos en runtime y genera los tipos TypeScript automáticamente.
-En lugar de escribir tanto la `interface` como la validación por separado,
-el schema es la única fuente de verdad.
-
-```bash
-npm install zod   # instala Zod v4
-```
-
-```tsx
-// src/components/ZodRegistrationForm.tsx
-
-import { useState } from 'react'
-import { z }        from 'zod'
-
-// 1. Definir el schema — es la única fuente de verdad
-const RegisterSchema = z.object({
-  fullName:  z.string().min(2, 'Mínimo 2 caracteres'),
-  email:     z.string().email('Introduce un email válido'),
-  password:  z.string()
-    .min(8, 'Mínimo 8 caracteres')
-    .regex(/[A-Z]/, 'Debe contener al menos una mayúscula')
-    .regex(/[0-9]/, 'Debe contener al menos un número'),
-  confirm:   z.string(),
-  role:      z.enum(['admin', 'editor', 'viewer']),
-  birthYear: z.number({ error: 'Debe ser un número' })
-    .int('Debe ser un año completo')
-    .min(1900, 'Año inválido')
-    .max(new Date().getFullYear() - 18, 'Debes ser mayor de edad'),
-}).refine(
-  (data) => data.password === data.confirm,
-  { message: 'Las contraseñas no coinciden', path: ['confirm'] }
-)
-
-// 2. Inferir el tipo desde el schema — sin duplicar la interface
-type RegisterFormData = z.infer<typeof RegisterSchema>
-
-// Errores: un string opcional por campo
-type FormErrors = Partial<Record<keyof RegisterFormData, string>>
-
-const INITIAL_VALUES: RegisterFormData = {
-  fullName:  '',
-  email:     '',
-  password:  '',
-  confirm:   '',
-  role:      'viewer',
-  birthYear: 2000,
-}
-
-export default function ZodRegistrationForm() {
-  const [values, setValues] = useState<RegisterFormData>(INITIAL_VALUES)
-  const [errors, setErrors] = useState<FormErrors>({})
-  const [success, setSuccess] = useState(false)
-
-  // Tipado genérico — field es una clave válida, value tiene el tipo correcto
-  function handleChange<K extends keyof RegisterFormData>(
-    field: K,
-    value: RegisterFormData[K]
-  ) {
-    setValues((prev) => ({ ...prev, [field]: value }))
-    // Limpia el error del campo al escribir
-    setErrors((prev) => ({ ...prev, [field]: undefined }))
-  }
-
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-
-    // safeParse — nunca lanza, retorna { success, data } o { success, error }
-    const result = RegisterSchema.safeParse(values)
-
-    if (!result.success) {
-      // Convertir los issues de Zod a nuestro mapa de errores
-      const zodErrors: FormErrors = {}
-      for (const issue of result.error.issues) {
-        const field = issue.path[0] as keyof RegisterFormData
-        // Guarda solo el primer error por campo
-        if (field && !zodErrors[field]) {
-          zodErrors[field] = issue.message
-        }
-      }
-      setErrors(zodErrors)
-      return
-    }
-
-    // result.data está completamente tipado — TypeScript lo sabe
-    console.log('Datos validados:', result.data)
-    setSuccess(true)
-  }
+  const categories = [...new Set(PRODUCTS.map((p) => p.category))]
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 360 }}
-    >
-      {success && (
-        <div style={{ padding: 12, background: '#dcfce7', borderRadius: 6, color: '#166534' }}>
-          ✅ Registro completado
-        </div>
-      )}
+    <div>
+      <h1 style={{ fontSize: 22, marginBottom: 16 }}>Productos</h1>
 
-      {/* Nombre */}
-      <FormField
-        label="Nombre completo"
-        value={values.fullName}
-        error={errors.fullName}
-        placeholder="Ana García"
-        onChange={(v) => handleChange('fullName', v)}
-      />
-
-      {/* Email */}
-      <FormField
-        label="Correo electrónico"
-        type="email"
-        value={values.email}
-        error={errors.email}
-        placeholder="tu@email.com"
-        onChange={(v) => handleChange('email', v)}
-      />
-
-      {/* Contraseña */}
-      <FormField
-        label="Contraseña"
-        type="password"
-        value={values.password}
-        error={errors.password}
-        placeholder="Mín. 8 caracteres, 1 mayúscula, 1 número"
-        onChange={(v) => handleChange('password', v)}
-      />
-
-      {/* Confirmar contraseña */}
-      <FormField
-        label="Confirmar contraseña"
-        type="password"
-        value={values.confirm}
-        error={errors.confirm}
-        placeholder="Repite la contraseña"
-        onChange={(v) => handleChange('confirm', v)}
-      />
-
-      {/* Rol */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <label style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>Rol</label>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <input
+          value={query}
+          onChange={(e) => handleQueryChange(e.target.value)}
+          placeholder="Buscar..."
+          style={{ flex: 1, padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6 }}
+        />
         <select
-          value={values.role}
-          onChange={(e) =>
-            handleChange('role', e.target.value as RegisterFormData['role'])
-          }
+          value={category}
+          onChange={(e) => handleCategoryChange(e.target.value)}
           style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6 }}
         >
-          <option value="viewer">Viewer</option>
-          <option value="editor">Editor</option>
-          <option value="admin">Admin</option>
+          <option value="">Todas las categorías</option>
+          {categories.map((cat) => (
+            <option key={cat} value={cat}>{cat}</option>
+          ))}
         </select>
-        {errors.role && <p style={errorStyle}>{errors.role}</p>}
       </div>
 
-      {/* Año de nacimiento */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <label style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>
-          Año de nacimiento
-        </label>
-        <input
-          type="number"
-          value={values.birthYear}
-          onChange={(e) => handleChange('birthYear', Number(e.target.value))}
-          style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6 }}
-        />
-        {errors.birthYear && <p style={errorStyle}>{errors.birthYear}</p>}
-      </div>
-
-      <button
-        type="submit"
-        style={{
-          padding: '10px', background: '#0070f3', color: '#fff',
-          border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 500,
-        }}
-      >
-        Registrar
-      </button>
-    </form>
-  )
-}
-
-interface FormFieldProps {
-  label:        string
-  value:        string
-  error?:       string
-  placeholder?: string
-  type?:        string
-  onChange:     (value: string) => void
-}
-
-function FormField({ label, value, error, placeholder, type = 'text', onChange }: FormFieldProps) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <label style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        style={{
-          padding: '8px 12px', fontSize: 14,
-          border: `1px solid ${error ? '#ef4444' : '#d1d5db'}`,
-          borderRadius: 6,
-        }}
-      />
-      {error && <p style={errorStyle}>{error}</p>}
-    </div>
-  )
-}
-
-const errorStyle = { margin: 0, fontSize: 12, color: '#ef4444' }
-```
-
-### Prueba esto
-
-- Haz clic en "Registrar" con todos los campos vacíos — observa los mensajes de error de Zod en rojo bajo cada campo: "Mínimo 2 caracteres", "Introduce un email válido", etc.
-- Escribe una contraseña sin mayúsculas como `contraseña1` — el error "Debe contener al menos una mayúscula" aparece al intentar enviar el formulario
-- Escribe una contraseña válida en "Contraseña" pero distinta en "Confirmar contraseña" — el error "Las contraseñas no coinciden" aparece solo bajo el campo de confirmación gracias a `path: ['confirm']` en `refine`
-- Cambia el año de nacimiento a `2010` y haz clic en "Registrar" — aparece el error "Debes ser mayor de edad" porque `2010` es menor que `añoActual - 18`
-- Modifica la regla `.min(8, ...)` de la contraseña a `.min(12, 'Mínimo 12 caracteres')` en el schema — el mensaje de error se actualiza automáticamente sin cambiar nada más en el componente
-- Escribe en el campo "Nombre completo" y luego bórralo — el error desaparece al escribir porque `handleChange` ejecuta `setErrors((prev) => ({ ...prev, [field]: undefined }))` en cada cambio
-- Envía el formulario con todos los datos válidos y abre la consola — observa que `result.data` está completamente tipado: TypeScript infiere los tipos desde el schema de Zod
-
----
-
-## Formulario de contacto con `useReducer`
-
-Para formularios que necesitan gestionar envío async con múltiples estados,
-`useReducer` es más ordenado que varios `useState` coordinados.
-
-```tsx
-// src/components/ContactForm.tsx
-
-import { useReducer } from 'react'
-
-interface ContactState {
-  name:    string
-  email:   string
-  subject: string
-  message: string
-  errors:  Partial<Record<'name' | 'email' | 'subject' | 'message', string>>
-  status:  'idle' | 'sending' | 'sent' | 'error'
-}
-
-type ContactAction =
-  | { type: 'SET_FIELD'; field: keyof Pick<ContactState, 'name' | 'email' | 'subject' | 'message'>; value: string }
-  | { type: 'SET_ERRORS'; errors: ContactState['errors'] }
-  | { type: 'SENDING' }
-  | { type: 'SENT' }
-  | { type: 'ERROR' }
-  | { type: 'RESET' }
-
-const INITIAL: ContactState = {
-  name: '', email: '', subject: '', message: '',
-  errors: {}, status: 'idle',
-}
-
-function contactReducer(state: ContactState, action: ContactAction): ContactState {
-  switch (action.type) {
-    case 'SET_FIELD':
-      return {
-        ...state,
-        [action.field]: action.value,
-        errors: { ...state.errors, [action.field]: undefined },
-      }
-    case 'SET_ERRORS': return { ...state, errors: action.errors }
-    case 'SENDING':    return { ...state, status: 'sending' }
-    case 'SENT':       return { ...INITIAL, status: 'sent' }
-    case 'ERROR':      return { ...state, status: 'error' }
-    case 'RESET':      return INITIAL
-  }
-}
-
-export default function ContactForm() {
-  const [state, dispatch] = useReducer(contactReducer, INITIAL)
-
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-
-    const errors: ContactState['errors'] = {}
-    if (!state.name.trim())         errors.name    = 'Requerido'
-    if (!state.email.includes('@')) errors.email   = 'Email inválido'
-    if (!state.subject.trim())      errors.subject = 'Requerido'
-    if (state.message.length < 10)  errors.message = 'Mínimo 10 caracteres'
-
-    if (Object.keys(errors).length > 0) {
-      dispatch({ type: 'SET_ERRORS', errors })
-      return
-    }
-
-    dispatch({ type: 'SENDING' })
-    try {
-      await new Promise((r) => setTimeout(r, 1200)) // simula fetch
-      dispatch({ type: 'SENT' })
-    } catch {
-      dispatch({ type: 'ERROR' })
-    }
-  }
-
-  const isSending = state.status === 'sending'
-
-  return (
-    <form
-      onSubmit={handleSubmit}
-      style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 360 }}
-    >
-      {state.status === 'sent' && (
-        <div style={{ padding: 12, background: '#dcfce7', borderRadius: 6, color: '#166534' }}>
-          ✅ Mensaje enviado. Te responderemos pronto.
-        </div>
-      )}
-      {state.status === 'error' && (
-        <div style={{ padding: 12, background: '#fef2f2', borderRadius: 6, color: '#dc2626' }}>
-          ❌ Error al enviar. Inténtalo de nuevo.
-        </div>
-      )}
-
-      {(['name', 'email', 'subject'] as const).map((field) => (
-        <div key={field} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <label style={{ fontSize: 13, fontWeight: 500, color: '#374151', textTransform: 'capitalize' }}>
-            {field === 'name' ? 'Nombre' : field === 'email' ? 'Email' : 'Asunto'}
-          </label>
-          <input
-            type={field === 'email' ? 'email' : 'text'}
-            value={state[field]}
-            onChange={(e) => dispatch({ type: 'SET_FIELD', field, value: e.target.value })}
-            disabled={isSending}
-            style={{
-              padding: '8px 12px', fontSize: 14,
-              border: `1px solid ${state.errors[field] ? '#ef4444' : '#d1d5db'}`,
-              borderRadius: 6,
-            }}
-          />
-          {state.errors[field] && (
-            <p style={{ margin: 0, fontSize: 12, color: '#ef4444' }}>
-              {state.errors[field]}
-            </p>
-          )}
-        </div>
-      ))}
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <label style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>Mensaje</label>
-        <textarea
-          value={state.message}
-          onChange={(e) => dispatch({ type: 'SET_FIELD', field: 'message', value: e.target.value })}
-          disabled={isSending}
-          rows={4}
-          placeholder="Escribe tu mensaje (mínimo 10 caracteres)"
-          style={{
-            padding: '8px 12px', fontSize: 14, resize: 'vertical',
-            border: `1px solid ${state.errors.message ? '#ef4444' : '#d1d5db'}`,
-            borderRadius: 6, fontFamily: 'inherit',
-          }}
-        />
-        {state.errors.message && (
-          <p style={{ margin: 0, fontSize: 12, color: '#ef4444' }}>{state.errors.message}</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {filtered.map((product) => (
+          <Link
+            key={product.id}
+            to={`/products/${product.id}`}
+            style={{ textDecoration: 'none', color: 'inherit' }}
+          >
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '12px 16px', border: '1px solid #e5e7eb', borderRadius: 8,
+            }}>
+              <div>
+                <p style={{ margin: 0, fontWeight: 500 }}>{product.name}</p>
+                <p style={{ margin: 0, fontSize: 12, color: '#9ca3af' }}>{product.category}</p>
+              </div>
+              <span style={{ fontWeight: 600 }}>${product.price}</span>
+            </div>
+          </Link>
+        ))}
+        {filtered.length === 0 && (
+          <p style={{ color: '#9ca3af' }}>Sin resultados.</p>
         )}
       </div>
-
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button
-          type="submit"
-          disabled={isSending}
-          style={{
-            flex: 1, padding: '10px',
-            background: isSending ? '#93c5fd' : '#0070f3',
-            color: '#fff', border: 'none', borderRadius: 6,
-            cursor: isSending ? 'not-allowed' : 'pointer', fontWeight: 500,
-          }}
-        >
-          {isSending ? 'Enviando...' : 'Enviar mensaje'}
-        </button>
-        <button
-          type="button"
-          onClick={() => dispatch({ type: 'RESET' })}
-          disabled={isSending}
-          style={{
-            padding: '10px 16px', background: '#f3f4f6', color: '#6b7280',
-            border: 'none', borderRadius: 6, cursor: 'pointer',
-          }}
-        >
-          Limpiar
-        </button>
-      </div>
-    </form>
+    </div>
   )
 }
 ```
 
 ### Prueba esto
 
-- Haz clic en "Enviar mensaje" con todos los campos vacíos — observa que los cuatro errores aparecen a la vez: "Requerido", "Email inválido", "Requerido" y "Mínimo 10 caracteres"
-- Escribe algo en el campo "Nombre" — observa que el error de ese campo desaparece de inmediato porque `SET_FIELD` incluye `errors: { ...state.errors, [field]: undefined }` en el reducer
-- Haz clic en "Enviar mensaje" con datos válidos — el botón cambia a "Enviando..." y se deshabilita durante 1,2 segundos simulando una llamada a la API
-- Tras el envío exitoso, observa que el formulario se limpia automáticamente y aparece el banner verde — esto ocurre porque `SENT` retorna `{ ...INITIAL, status: 'sent' }`, no el estado actual
-- Haz clic en "Limpiar" mientras el formulario tiene texto — todos los campos vuelven a estar vacíos porque `RESET` retorna `INITIAL` directamente
-- Añade un nuevo caso al reducer: `case 'RESET_ERRORS': return { ...state, errors: {} }` y agrega un botón que lo dispare — los errores desaparecen sin resetear los valores
-- Cambia el `setTimeout` de 1200 a 50 y lanza un `throw new Error()` dentro del `try` — el banner rojo "Error al enviar" aparece y el formulario mantiene los datos para reintentarlo
+- Escribe "teclado" en el input y observa cómo la URL cambia a `?q=teclado` — copia esa URL, abre una nueva pestaña y pégala — el filtro se restaura automáticamente
+- Filtra por categoría "periféricos" y luego recarga la página — observa que el filtro sigue activo porque está en la URL (`?category=periféricos`), no en estado de React
+- Elimina `{ replace: true }` de `setSearchParams` y teclea varias letras en el buscador — luego presiona "Atrás" del navegador y observa que retrocede letra a letra en el historial
+- Combina ambos filtros: escribe "mouse" y selecciona "periféricos" — observa en la URL que los dos params coexisten: `?q=mouse&category=periféricos`
+- Llama a `setSearchParams` directamente con `new URLSearchParams()` vacío para limpiar todos los filtros y observa que la lista vuelve a mostrar todos los productos
 
 ---
 
-## `src/App.tsx`
+## Rutas anidadas con `Outlet`
 
 ```tsx
-// src/App.tsx
+// src/layouts/DashboardLayout.tsx
 
-import BasicForm            from './components/BasicForm'
-import ManualValidationForm from './components/ManualValidationForm'
-import ZodRegistrationForm  from './components/ZodRegistrationForm'
-import ContactForm          from './components/ContactForm'
+import { NavLink, Outlet } from 'react-router-dom'
 
-// ┌──────────────────────────────────────────────────────────────────────┐
-// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
-// │  1  BasicForm            — formulario controlado básico             │
-// │  2  ManualValidationForm — validación manual con touched            │
-// │  3  ZodRegistrationForm  — validación con Zod v4                   │
-// │  4  ContactForm          — envío async con useReducer               │
-// └──────────────────────────────────────────────────────────────────────┘
-const PASO = 1
+const NAV_ITEMS = [
+  { to: '',           label: 'Resumen'       },
+  { to: 'analytics',  label: 'Analítica'     },
+  { to: 'settings',   label: 'Configuración' },
+]
 
-export default function App() {
-  const content =
-    PASO === 1 ? <BasicForm /> :
-    PASO === 2 ? <ManualValidationForm /> :
-    PASO === 3 ? <ZodRegistrationForm /> :
-    PASO === 4 ? <ContactForm /> :
-    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
-
+export default function DashboardLayout() {
   return (
-    <main style={{ maxWidth: 420, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
-      {content}
-    </main>
+    <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 24 }}>
+      <aside style={{ borderRight: '1px solid #e5e7eb', paddingRight: 16 }}>
+        <p style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', marginBottom: 8 }}>
+          DASHBOARD
+        </p>
+        <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {NAV_ITEMS.map(({ to, label }) => (
+            <NavLink
+              key={label}
+              to={to}
+              end
+              style={({ isActive }) => ({
+                padding: '6px 10px', borderRadius: 6,
+                textDecoration: 'none', fontSize: 14,
+                background: isActive ? '#eff6ff' : 'transparent',
+                color:      isActive ? '#1d4ed8' : '#374151',
+                fontWeight: isActive ? 600 : 400,
+              })}
+            >
+              {label}
+            </NavLink>
+          ))}
+        </nav>
+      </aside>
+
+      <section>
+        <Outlet />  {/* renderiza la sub-ruta activa aquí */}
+      </section>
+    </div>
   )
 }
 ```
 
+### Prueba esto
+
+- Navega a `/dashboard` — observa que el `Outlet` renderiza `<Overview>` (la sub-ruta `index`) y el sidebar muestra "Resumen" resaltado
+- Navega a `/dashboard/analytics` — observa que el sidebar actualiza el resaltado a "Analítica" sin recargar la página ni desmontar `DashboardLayout`
+- Abre las DevTools de React, selecciona `DashboardLayout` y navega entre sub-rutas — confirma que `DashboardLayout` nunca se desmonta; solo cambia el contenido del `Outlet`
+- Quita `end` de los `NavLink` del sidebar y navega a `/dashboard/analytics` — observa que "Resumen" (ruta vacía `""`) también aparece resaltado al mismo tiempo
+- Añade una nueva entrada `{ to: 'team', label: 'Equipo' }` al array `NAV_ITEMS` sin crear la ruta en `App.tsx` — navega a ella y observa que `NotFoundPage` se renderiza dentro del `Outlet` del dashboard
+
+```tsx
+// src/App.tsx — rutas anidadas
+import { Routes, Route } from 'react-router-dom'
+import RootLayout       from './layouts/RootLayout'
+import DashboardLayout  from './layouts/DashboardLayout'
+import HomePage         from './pages/HomePage'
+import ProductsPage     from './pages/ProductsPage'
+import ProductDetailPage from './pages/ProductDetailPage'
+import AboutPage        from './pages/AboutPage'
+import LoginPage        from './pages/LoginPage'
+import NotFoundPage     from './pages/NotFoundPage'
+
+// Páginas del dashboard (simples por ahora)
+function Overview()   { return <h2>Resumen</h2> }
+function Analytics()  { return <h2>Analítica</h2> }
+function SettingsPage(){ return <h2>Configuración</h2> }
+
+export default function App() {
+  return (
+    <Routes>
+      {/* Layout raíz — todas las páginas comparten header */}
+      <Route element={<RootLayout />}>
+        <Route index          element={<HomePage />} />
+        <Route path="products" element={<ProductsPage />} />
+        <Route path="products/:id" element={<ProductDetailPage />} />
+        <Route path="about"   element={<AboutPage />} />
+        <Route path="login"   element={<LoginPage />} />
+
+        {/* Dashboard con su propio layout anidado */}
+        <Route path="dashboard" element={<DashboardLayout />}>
+          <Route index          element={<Overview />} />
+          <Route path="analytics"  element={<Analytics />} />
+          <Route path="settings"   element={<SettingsPage />} />
+        </Route>
+
+        <Route path="*" element={<NotFoundPage />} />
+      </Route>
+    </Routes>
+  )
+}
+```
+
+El árbol de rutas anidadas genera este comportamiento:
+
+```
+URL: /                    → RootLayout > HomePage
+URL: /products            → RootLayout > ProductsPage
+URL: /products/3          → RootLayout > ProductDetailPage (id="3")
+URL: /dashboard           → RootLayout > DashboardLayout > Overview
+URL: /dashboard/analytics → RootLayout > DashboardLayout > Analytics
+```
+
+### Prueba esto
+
+- Navega a `/products/3` directamente en la barra de URL — observa que `RootLayout` (con el header) se mantiene y solo cambia el contenido principal
+- Cambia `<Route index element={<Overview />} />` por `<Route path="" element={<Overview />} />` y verifica que el comportamiento es idéntico — `index` es azúcar sintáctico para `path=""`
+- Añade `console.log('mount DashboardLayout')` en un `useEffect(() => { ... }, [])` dentro de `DashboardLayout` y navega entre `/dashboard`, `/dashboard/analytics` y `/dashboard/settings` — observa que el log solo aparece una vez, al entrar al dashboard por primera vez
+- Navega a `/dashboard/rutaghosts` y observa que `NotFoundPage` se renderiza en el lugar del `Outlet` de `RootLayout`, no dentro de `DashboardLayout`
+- Mueve la ruta `path="*"` dentro del bloque de `dashboard` — observa que ahora `/dashboard/inexistente` muestra `NotFoundPage` en el panel derecho del dashboard
+
 ---
 
-## Zod v4 — validators más usados
+## Rutas protegidas
 
-```ts
-import { z } from 'zod'
+```tsx
+// src/components/ProtectedRoute.tsx
 
-z.string()                           // string cualquiera
-z.string().min(2)                    // mínimo 2 caracteres
-z.string().max(100)                  // máximo 100 caracteres
-z.string().email()                   // formato email
-z.string().url()                     // formato URL
-z.string().regex(/[A-Z]/)           // expresión regular
-z.string().trim()                    // elimina espacios al validar
-z.string().optional()               // string | undefined
-z.string().nullable()               // string | null
-z.string().default('valor')          // valor por defecto si undefined
+import { Navigate, useLocation } from 'react-router-dom'
 
-z.number()                           // número
-z.number().int()                     // entero
-z.number().min(0)                    // mínimo
-z.number().max(100)                  // máximo
-z.number({ error: 'Mensaje' })       // mensaje de error personalizado en v4
+interface ProtectedRouteProps {
+  isAuthenticated: boolean
+  children:        React.ReactNode
+}
 
-z.boolean()
-z.date()
-z.enum(['a', 'b', 'c'])             // valores literales
-z.array(z.string())                  // array de strings
-z.object({ ... })                    // objeto con schema
+export default function ProtectedRoute({
+  isAuthenticated,
+  children,
+}: ProtectedRouteProps) {
+  const location = useLocation()
 
-// Refinamiento — validación cruzada entre campos
-schema.refine(
-  (data) => data.password === data.confirm,
-  { message: 'No coinciden', path: ['confirm'] }
+  if (!isAuthenticated) {
+    // Guarda la ruta actual para redirigir después del login
+    return <Navigate to="/login" state={{ from: location.pathname }} replace />
+  }
+
+  return <>{children}</>
+}
+```
+
+```tsx
+// Uso en App.tsx
+<Route
+  path="dashboard"
+  element={
+    <ProtectedRoute isAuthenticated={isAuthenticated}>
+      <DashboardLayout />
+    </ProtectedRoute>
+  }
+>
+  <Route index element={<Overview />} />
+</Route>
+```
+
+```tsx
+// En LoginPage — recuperar la ruta de origen y redirigir allí
+import { useLocation, useNavigate } from 'react-router-dom'
+
+interface LocationState {
+  from?: string
+}
+
+function LoginPage() {
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  const from = (location.state as LocationState)?.from ?? '/dashboard'
+
+  async function handleLogin() {
+    // ...autenticación
+    navigate(from, { replace: true })  // vuelve a la ruta original
+  }
+}
+```
+
+### Prueba esto
+
+- Pasa `isAuthenticated={false}` a `ProtectedRoute` y navega directamente a `/dashboard` — observa que la URL cambia a `/login` y en `location.state` está la ruta de origen
+- Tras el login exitoso con `navigate(from, { replace: true })`, presiona "Atrás" — observa que no vuelves al login sino a la página anterior al intento de entrar al dashboard
+- Pasa `isAuthenticated={true}` y navega a `/dashboard` — observa que `ProtectedRoute` renderiza `children` directamente sin ninguna redirección
+- Cambia `replace` a `false` en el `<Navigate>` dentro de `ProtectedRoute` y navega a `/dashboard` no autenticado — luego inicia sesión y presiona "Atrás"; observas que vuelves al `/login` (que ya no debería ser accesible)
+- Elimina `state={{ from: location.pathname }}` del `<Navigate>` y completa el login — observa que siempre redirige a `/dashboard` (el fallback `??`), perdiendo la ruta de origen
+- Añade un `console.log(location.state)` en `LoginPage` para inspeccionar el objeto de estado que llega desde `ProtectedRoute`
+
+---
+
+## `src/main.tsx` completo
+
+```tsx
+// src/main.tsx
+
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
+import './index.css'
+import App from './App.tsx'
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </StrictMode>,
 )
-
-// Transformación
-z.string().transform((v) => v.trim().toLowerCase())
-
-// Inferir tipo desde schema
-type MyType = z.infer<typeof MySchema>
 ```
 
 ---
 
-## Qué estrategia usar según el caso
+## Hooks del router — resumen rápido
 
-| Caso | Estrategia recomendada |
-|---|---|
-| Formulario simple, 1–2 campos | `useState` + validación inline |
-| Formulario mediano con varios campos | `useState` + función `validate()` separada + campo `touched` |
-| Formulario con validaciones complejas o reutilizables | `useState` + **Zod** |
-| Formulario con estados de envío async | `useReducer` + Zod o validación manual |
-| Muchos formularios en la app | Considera **React Hook Form** + Zod |
+| Hook | Retorna | Uso típico |
+|---|---|---|
+| `useNavigate()` | función `navigate` | Redirigir programáticamente |
+| `useParams<T>()` | objeto con params de URL | Leer `:id`, `:slug`, etc. |
+| `useLocation()` | objeto `location` | Leer `pathname`, `search`, `state` |
+| `useSearchParams()` | `[params, setParams]` | Leer y escribir query strings `?q=...` |
+
+---
+
+## Errores comunes con React Router
+
+```tsx
+// ❌ BrowserRouter dentro de App — los hooks no funcionarán
+// fuera del árbol de BrowserRouter si lo colocas en App
+function App() {
+  return (
+    <BrowserRouter>   {/* ← muévelo a main.tsx */}
+      <Routes>...</Routes>
+    </BrowserRouter>
+  )
+}
+
+// ❌ Usar <a href="..."> en lugar de <Link> — recarga la página
+<a href="/about">Acerca de</a>
+
+// ✅ Siempre Link/NavLink para navegación interna
+<Link to="/about">Acerca de</Link>
+
+// ❌ Olvidar end en NavLink para "/"
+<NavLink to="/">Inicio</NavLink>  // queda activo en /about, /products, etc.
+
+// ✅ end hace que solo esté activo en la ruta exacta
+<NavLink to="/" end>Inicio</NavLink>
+
+// ❌ No convertir el param a número cuando se necesita
+const { id } = useParams<{ id: string }>()
+fetch(`/api/products/${id}`)  // ok — id es string y fetch acepta string
+
+const productId = id   // ❌ si lo usas donde esperan number
+const productId = Number(id)  // ✅ conversión explícita
+```
 
 ---
 
 ## Ejercicios propuestos
 
-1. **`LoginForm` con Zod** — crea un formulario de login con email y contraseña.
-   Valida con Zod: email debe ser válido, contraseña mínimo 6 caracteres.
-   Al enviar, simula una llamada async y muestra el estado de carga.
+1. **Breadcrumbs** — crea un componente `Breadcrumbs` que use `useLocation`
+   para dividir `pathname` por `/` y mostrar la ruta actual como migas de pan.
+   Cada segmento debe ser un `<Link>` a la ruta parcial correspondiente.
 
-2. **`ProfileForm` con imagen** — formulario con nombre, bio (máx 200 chars)
-   y un input `type="file"` para avatar. El campo de archivo es no controlado
-   (usa `useRef<HTMLInputElement>`). Valida nombre y bio con Zod.
+2. **Tabs con URL** — crea un componente con 3 pestañas (Perfil, Seguridad, Notificaciones).
+   Cada pestaña actualiza un search param `?tab=profile` con `useSearchParams`.
+   Al recargar la página, la pestaña activa se preserva.
 
-3. **`SearchForm` con URL** — formulario con un input de búsqueda que sincroniza
-   con `useSearchParams` de React Router. Al enviar, actualiza `?q=valor` en la URL.
-
----
-
-## Resumen de la página 12
-
-- Los formularios controlados vinculan cada campo a un estado de React con `value` + `onChange`.
-- `e.preventDefault()` en `onSubmit` es obligatorio — evita que el navegador recargue la página.
-- El patrón `touched` (campo tocado) permite mostrar errores solo después de que el usuario interactuó con el campo — mejor UX que validar al escribir desde el inicio.
-- Zod v4: `z.object().safeParse()` nunca lanza — retorna `{ success, data }` o `{ success, error }`.
-- `z.infer<typeof Schema>` genera el tipo TypeScript automáticamente — el schema es la única fuente de verdad.
-- En Zod v4 el mensaje de error para tipos base (`z.number()`) va en `{ error: 'mensaje' }`, no en `message`.
-- `useReducer` es ideal para formularios con estados de envío async — centraliza todos los estados en un solo lugar.
-- Para apps con muchos formularios complejos, considera **React Hook Form** + Zod como capa superior.
+3. **404 personalizado** — crea una `NotFoundPage` que use `useLocation`
+   para mostrar la ruta que no se encontró y un botón que llame a `navigate(-1)`.
 
 ---
 
-> **Siguiente página →** Testing con Vitest y React Testing Library:
-> testear componentes, hooks y comportamiento del usuario.
+## Resumen de la página 10
+
+- `BrowserRouter` va en `main.tsx` — envuelve toda la aplicación.
+- `Routes` + `Route` definen el árbol de rutas. `path="*"` captura rutas no definidas.
+- `Link` navega sin recargar. `NavLink` recibe `{ isActive }` para estilos condicionales.
+- `end` en `NavLink` es imprescindible para el enlace raíz `/`.
+- `useParams<{ id: string }>()` — los params siempre son `string`, convierte si necesitas otro tipo.
+- `useNavigate()` para redirección programática. `replace: true` evita que la ruta anterior quede en el historial.
+- `useSearchParams()` sincroniza filtros con la URL — los usuarios pueden compartir o marcar la búsqueda.
+- Las rutas anidadas con `<Outlet />` permiten layouts compartidos sin duplicar código.
+- `ProtectedRoute` redirige con `<Navigate>` y guarda la ruta de origen en `location.state`.
+
+---
+
+> **Siguiente página →** Rendimiento: `React.memo`, patrones de optimización
+> y herramientas de profiling para detectar re-renders innecesarios.

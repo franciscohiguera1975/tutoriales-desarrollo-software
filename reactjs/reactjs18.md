@@ -1,81 +1,32 @@
-# Curso React.js + TypeScript — Página 17
-## Frameworks de estilos · Tailwind CSS v4
-### LAB: 5 componentes aislados — HOME: landing de cursos con Router
+# Curso React.js + TypeScript — Página 3B
+## Módulo 1 · Fundamentos
+### Estilos en React: CSS global, inline, CSS Modules, styled-components y theming
 
 ---
 
-## ¿Qué es Tailwind CSS?
+## Los cuatro enfoques de estilos en React
 
-Tailwind es un framework **utility-first**: en lugar de escribir clases
-semánticas como `.card` o `.hero`, combinas clases atómicas directamente
-en el JSX — `rounded-2xl`, `bg-slate-950`, `text-white/60`, `hover:bg-blue-500`.
+React no impone ningún sistema de estilos — puedes usar cualquier combinación.
+Cada enfoque tiene sus ventajas y casos de uso claros:
 
-```tsx
-// Sin Tailwind — necesitas un archivo CSS separado
-<button className="btn-primary">Enviar</button>
-
-// Con Tailwind — los estilos viven en el JSX
-<button className="rounded-xl bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-500 transition">
-  Enviar
-</button>
-```
-
-El resultado: sin archivos CSS extra, sin colisiones de nombres, sin
-cambios de contexto entre JSX y CSS.
-
----
-
-## Tailwind v4 — diferencias clave respecto a v3
-
-| v3 | v4 |
-|---|---|
-| `tailwind.config.ts` obligatorio | **No existe** — no se crea |
-| `@tailwind base/components/utilities` en CSS | Solo `@import "tailwindcss"` |
-| Plugin separado `@tailwindcss/vite` era opcional | Plugin oficial requerido |
-| Configuración en JS/TS | Configuración en CSS con `@theme` |
+| Enfoque | Scope | Soporte `:hover` | Dinámico | Dependencia extra |
+|---|---|---|---|---|
+| CSS global | Global — puede colisionar | ✅ | Manual | ❌ |
+| Inline styles | Por elemento | ❌ | ✅ directo | ❌ |
+| CSS Modules | Local — sin colisión | ✅ | Manual | ❌ |
+| styled-components | Por componente | ✅ | ✅ por props | ✅ `styled-components` |
 
 ---
 
 ## Instalación
 
+Solo `styled-components` requiere instalación extra.
+En v6 **los tipos ya están incluidos** — no necesitas `@types/styled-components`:
+
 ```bash
-npm install tailwindcss @tailwindcss/vite
+npm install styled-components
+# En v6 NO instales @types/styled-components — viene incluido
 ```
-
-| Paquete | Versión actual |
-|---|---|
-| `tailwindcss` | 4.2.2 |
-| `@tailwindcss/vite` | 4.2.2 |
-
----
-
-## Configuración — 2 archivos, sin más
-
-### `vite.config.ts`
-
-```ts
-// vite.config.ts
-
-import { defineConfig } from 'vite'
-import react       from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
-
-export default defineConfig({
-  plugins: [react(), tailwindcss()],
-  //                 ↑ plugin oficial de Tailwind v4
-})
-```
-
-### `src/index.css`
-
-```css
-/* src/index.css — una sola línea */
-@import "tailwindcss";
-```
-
-> ⚠️ No crees `tailwind.config.ts` — en v4 no existe.
-> Si quieres personalizar colores o fuentes, se hace directamente
-> en el CSS con la directiva `@theme`.
 
 ---
 
@@ -83,462 +34,691 @@ export default defineConfig({
 
 ```
 src/
-├── lab/
-│   ├── LabTwButtons.tsx
-│   ├── LabTwAlert.tsx
-│   ├── LabTwCard.tsx
-│   ├── LabTwForm.tsx
-│   └── LabTwTable.tsx
-├── components/tw/
-│   ├── TwNavbar.tsx
-│   ├── TwHero.tsx
-│   ├── TwCourseGrid.tsx
-│   ├── TwNewsletter.tsx
-│   └── TwFooter.tsx
-├── pages/
-│   ├── HomeTW.tsx
-│   └── AboutTW.tsx
-├── App.tsx         ← alterna entre AppLab y AppHome
-├── AppLab.tsx
-├── AppHome.tsx
-├── index.css       ← solo @import "tailwindcss"
+├── styles/
+│   ├── global.css          ← CSS global
+│   └── card.module.css     ← CSS Modules
+├── theme/
+│   ├── theme.css           ← CSS variables light/dark
+│   └── ThemeContext.tsx    ← Context para el tema
+├── hooks/
+│   ├── useStyles.ts        ← hook para cambiar estilos en tiempo real
+│   └── useHover.ts         ← hook para estilos al pasar el cursor
+├── components/
+│   ├── CssGlobalDemo.tsx
+│   ├── InlineStyleDemo.tsx
+│   ├── CssModuleDemo.tsx
+│   ├── StyledComponentsDemo.tsx
+│   ├── LiveStyleEditor.tsx
+│   ├── HoverDemo.tsx
+│   └── ThemePanel.tsx
+├── App.tsx
 └── main.tsx
 ```
 
 ---
 
-## Fase 1 — Laboratorio
+## 1 · CSS Global
 
----
+El enfoque más simple: un archivo `.css` que se importa directamente.
+Las clases son globales — cualquier componente que importe el archivo
+puede usarlas, pero también pueden colisionar con clases de otros archivos.
 
-### `src/lab/LabTwButtons.tsx`
+### `src/styles/global.css`
+
+```css
+/* src/styles/global.css */
+
+.globalCard {
+  border:        1px solid var(--border);
+  border-radius: 10px;
+  padding:       16px;
+}
+
+.globalTitle {
+  margin:      0 0 8px 0;
+  color:       var(--accent);
+  font-weight: 800;
+}
+```
+
+### `src/components/CssGlobalDemo.tsx`
 
 ```tsx
-// src/lab/LabTwButtons.tsx
+// src/components/CssGlobalDemo.tsx
 
-export default function LabTwButtons() {
+import '../styles/global.css'
+
+export default function CssGlobalDemo() {
   return (
-    <main className="min-h-screen bg-slate-950 text-white p-8">
-      <h2 className="text-xl font-extrabold mb-1">LAB: Buttons</h2>
-      <p className="text-white/60 mb-6 text-sm">Variantes, outline, tamaños y estados.</p>
-
-      {/* Variantes */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        <button className="rounded-xl bg-blue-600 px-4 py-2 font-semibold hover:bg-blue-500 transition">
-          Primary
-        </button>
-        <button className="rounded-xl border border-white/20 px-4 py-2 font-semibold text-white/90 hover:bg-white/10 transition">
-          Outline
-        </button>
-        <button className="rounded-xl bg-emerald-600 px-4 py-2 font-semibold hover:bg-emerald-500 transition">
-          Success
-        </button>
-        <button className="rounded-xl bg-red-600 px-4 py-2 font-semibold hover:bg-red-500 transition">
-          Danger
-        </button>
-        <button className="rounded-xl bg-amber-500 px-4 py-2 font-semibold text-slate-900 hover:bg-amber-400 transition">
-          Warning
-        </button>
-      </div>
-
-      {/* Tamaños */}
-      <div className="flex flex-wrap items-center gap-2">
-        <button className="rounded-xl bg-blue-600 px-6 py-3 text-lg font-semibold hover:bg-blue-500 transition">
-          Grande
-        </button>
-        <button className="rounded-xl bg-blue-600 px-4 py-2 font-semibold hover:bg-blue-500 transition">
-          Normal
-        </button>
-        <button className="rounded-xl bg-blue-600 px-3 py-1 text-sm font-semibold hover:bg-blue-500 transition">
-          Pequeño
-        </button>
-        <button
-          disabled
-          className="rounded-xl bg-blue-600 px-4 py-2 font-semibold opacity-40 cursor-not-allowed"
-        >
-          Deshabilitado
-        </button>
-      </div>
-    </main>
+    <div className="globalCard">
+      <h3 className="globalTitle">CSS Global</h3>
+      <p style={{ margin: 0, color: 'var(--muted)' }}>
+        Clases definidas en un archivo <code>.css</code> importado en el componente.
+        Scope global — pueden colisionar si dos componentes usan el mismo nombre de clase.
+      </p>
+    </div>
   )
 }
 ```
 
+### Prueba esto
+
+- Cambia `.globalCard { border-radius: 10px }` a `border-radius: 0` en `global.css` — guarda y observa cómo el cambio afecta a todos los elementos que usen esa clase en la app
+- Renombra la clase `.globalTitle` a `.title` en el CSS y en el componente — observa que si otro componente ya tiene una clase `.title`, los estilos colisionarían en el DOM
+- Añade una segunda clase `.globalSubtitle { color: red; font-size: 12px }` en el archivo CSS e inyéctala en el componente con `className="globalSubtitle"` en el párrafo
+- Importa `global.css` desde dos componentes distintos — abre DevTools y comprueba que la hoja de estilos se incluye una sola vez en el DOM
+- Añade `font-family: monospace` a `.globalCard` — el cambio aplica globalmente a todos los componentes que usen esa clase sin tocar el JSX
+
+> **Cuándo usarlo**: estilos base, reset CSS, tipografía global, variables de diseño.
+> Para componentes individuales, CSS Modules es más seguro.
+
 ---
 
-### `src/lab/LabTwAlert.tsx`
+## 2 · Inline styles
+
+Los estilos van como objetos JavaScript en la prop `style`.
+TypeScript valida el objeto contra `React.CSSProperties` — cualquier propiedad
+mal escrita o con valor incorrecto da error en el editor.
+
+### `src/components/InlineStyleDemo.tsx`
 
 ```tsx
-// src/lab/LabTwAlert.tsx
+// src/components/InlineStyleDemo.tsx
 
-import { useState } from 'react'
+import type { CSSProperties } from 'react'
 
-type AlertType = 'success' | 'error' | 'warning' | 'info'
+export default function InlineStyleDemo() {
+  // CSSProperties tipa el objeto — TypeScript detecta errores al escribir
+  const card: CSSProperties = {
+    border:       '1px solid var(--border)',
+    background:   'var(--card)',
+    borderRadius: 10,
+    padding:      16,
+  }
 
-interface AlertProps {
-  type:    AlertType
-  message: string
-  onClose: () => void
-}
+  const title: CSSProperties = {
+    margin:     '0 0 8px 0',
+    color:      'var(--accent)',
+    fontWeight: 800,
+  }
 
-// Mapa de clases por tipo — objeto tipado en lugar de condicional largo
-const STYLES: Record<AlertType, string> = {
-  success: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300',
-  error:   'border-red-400/30 bg-red-400/10 text-red-300',
-  warning: 'border-amber-400/30 bg-amber-400/10 text-amber-300',
-  info:    'border-blue-400/30 bg-blue-400/10 text-blue-300',
-}
-
-function Alert({ type, message, onClose }: AlertProps) {
   return (
-    <div className={`flex items-start justify-between rounded-2xl border p-4 ${STYLES[type]}`}>
-      <span className="text-sm">{message}</span>
-      <button
-        onClick={onClose}
-        className="ml-4 text-current opacity-60 hover:opacity-100 transition text-lg leading-none"
+    <div style={card}>
+      <h3 style={title}>Inline styles</h3>
+      <p style={{ margin: 0, color: 'var(--muted)' }}>
+        Estilos como objetos JS dentro del componente. Útil para valores dinámicos
+        pero sin soporte de pseudo-clases (<code>:hover</code>) ni media queries.
+      </p>
+    </div>
+  )
+}
+```
+
+### Prueba esto
+
+- Añade `boxShadow: '0 2px 8px rgba(0,0,0,0.1)'` al objeto `card` — guarda y observa la sombra aplicada de inmediato sin tocar ningún archivo CSS
+- Escribe `backround: 'red'` (con typo) en el objeto `card` — TypeScript muestra un error en el editor porque `backround` no es una propiedad válida de `CSSProperties`
+- Añade `:hover` directamente dentro del objeto de estilos como `':hover': { background: 'blue' }` — observa que no tiene efecto; los inline styles no soportan pseudo-clases
+- Cambia `fontWeight: 800` a `fontWeight: 'extrabold'` — TypeScript reporta error porque el valor esperado es un número o una de las cadenas válidas como `'bold'`
+- Convierte el objeto `title` en un estado con `useState` e incluye un botón que lo modifique en tiempo real — observa cómo el re-render aplica los nuevos estilos instantáneamente
+
+> **Limitación**: `style` no soporta `:hover`, `:focus`, `@media` ni animaciones CSS.
+> Para esos casos usa CSS Modules o styled-components.
+
+---
+
+## 3 · CSS Modules
+
+Vite soporta CSS Modules sin configuración extra — cualquier archivo que termine
+en `.module.css` activa el scope local automáticamente. Cada clase recibe un
+nombre único generado en build time: `.btn` puede convertirse en `.btn_a3f9k`.
+
+### `src/styles/card.module.css`
+
+```css
+/* src/styles/card.module.css */
+
+.card {
+  border:        1px solid var(--border);
+  background:    var(--card);
+  border-radius: 10px;
+  padding:       16px;
+}
+
+.title {
+  margin:      0 0 8px 0;
+  color:       var(--accent);
+  font-weight: 800;
+}
+
+.btn {
+  padding:       8px 16px;
+  background:    var(--accent);
+  color:         white;
+  border:        none;
+  border-radius: 8px;
+  cursor:        pointer;
+  font-weight:   600;
+}
+
+.btn:hover {
+  filter: brightness(1.1);   /* :hover sí funciona en CSS Modules */
+}
+```
+
+### `src/components/CssModuleDemo.tsx`
+
+```tsx
+// src/components/CssModuleDemo.tsx
+
+import styles from '../styles/card.module.css'
+
+export default function CssModuleDemo() {
+  return (
+    <div className={styles.card}>
+      <h3 className={styles.title}>CSS Modules</h3>
+      <p style={{ margin: '0 0 12px', color: 'var(--muted)' }}>
+        Cada clase recibe un nombre único generado en build time.
+        Elimina colisiones sin necesitar BEM ni prefijos manuales.
+      </p>
+      <button className={styles.btn}>Botón con módulo</button>
+    </div>
+  )
+}
+```
+
+### Prueba esto
+
+- Pasa el cursor sobre el botón — observa el efecto `brightness(1.1)` del selector `.btn:hover` que funciona en CSS Modules pero no en inline styles
+- Escribe `styles.boton` en lugar de `styles.btn` — TypeScript muestra un error inmediato porque la clase `boton` no existe en el módulo
+- Abre DevTools y examina el atributo `class` del botón — verás un nombre generado como `_btn_a3f9k` en lugar del `.btn` original, confirmando el scope local
+- Añade una clase `.highlight { background: yellow }` en `card.module.css` y úsala con `className={styles.highlight}` — funciona sin riesgo de colisión con otras clases `.highlight` del proyecto
+- Añade `@media (max-width: 480px) { .card { padding: 8px } }` en el módulo CSS — reduce la ventana del navegador y observa que el padding cambia solo en pantallas pequeñas
+
+> `styles` es un objeto TypeScript — si escribes `styles.btnTypo` y la clase
+> no existe, TypeScript lo detecta como error.
+
+---
+
+## 4 · styled-components v6
+
+CSS-in-JS: escribes CSS dentro de TypeScript, vinculado directamente al componente.
+El scope es automático, soporta `:hover`, media queries y recibe props tipadas.
+
+**Novedad de v6**: las props que controlan estilos deben usar el prefijo `$`
+(props transient) para evitar que pasen al DOM y generen warnings:
+
+```tsx
+// ❌ v5 — la prop variant llega al DOM como atributo HTML
+const Btn = styled.button<{ variant: 'primary' | 'outline' }>``
+
+// ✅ v6 — prefijo $ indica que es solo para estilos, no llega al DOM
+const Btn = styled.button<{ $variant?: 'primary' | 'outline' }>``
+```
+
+### `src/components/StyledComponentsDemo.tsx`
+
+```tsx
+// src/components/StyledComponentsDemo.tsx
+
+import styled from 'styled-components'
+
+// Props transient con prefijo $ — no pasan al DOM en v6
+interface BtnProps {
+  $variant?: 'primary' | 'outline'
+}
+
+const Card = styled.div`
+  border:        1px solid var(--border);
+  background:    var(--card);
+  border-radius: 10px;
+  padding:       16px;
+`
+
+const Title = styled.h3`
+  margin:      0 0 8px 0;
+  color:       var(--accent);
+  font-weight: 800;
+`
+
+const Btn = styled.button<BtnProps>`
+  padding:       8px 16px;
+  border-radius: 8px;
+  cursor:        pointer;
+  font-weight:   600;
+  border:        1px solid var(--accent);
+  background:    ${p => p.$variant === 'outline' ? 'transparent' : 'var(--accent)'};
+  color:         ${p => p.$variant === 'outline' ? 'var(--accent)' : 'white'};
+  transition:    filter 0.15s;
+
+  &:hover {
+    filter: brightness(1.1);
+  }
+`
+
+export default function StyledComponentsDemo() {
+  return (
+    <Card>
+      <Title>Styled-components v6</Title>
+      <p style={{ margin: '0 0 12px', color: 'var(--muted)' }}>
+        CSS-in-JS con scope automático. Props transient con prefijo <code>$</code>
+        en v6 para no contaminar el DOM.
+      </p>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Btn>Primary</Btn>
+        <Btn $variant="outline">Outline</Btn>
+      </div>
+    </Card>
+  )
+}
+```
+
+### Prueba esto
+
+- Cambia `$variant="outline"` a `$variant="primary"` — ambos botones renderizan con fondo de color; confirma que la lógica de prop controla el estilo
+- Elimina el prefijo `$` de la interfaz y del uso: `variant` en lugar de `$variant` — abre DevTools y observa el warning de React sobre un atributo desconocido en el DOM
+- Añade una tercera variante `$variant?: 'primary' | 'outline' | 'danger'` y agrega `background: ${p => p.$variant === 'danger' ? '#dc2626' : ...}` — el botón cambia de color según la prop
+- Añade `&:active { transform: scale(0.97) }` dentro del template literal de `Btn` — haz clic en el botón y observa el efecto de escala en la interacción
+- Añade `font-size: 18px` directamente en el template literal de `Card` — el cambio aplica solo a ese componente sin afectar otras tarjetas del proyecto
+
+---
+
+## 5 · Hooks para estilos dinámicos en tiempo real
+
+Los hooks permiten controlar estilos como si fueran estado — cambian
+la UI sin necesidad de clases adicionales ni lógica duplicada.
+
+### `src/hooks/useStyles.ts`
+
+Hook que expone funciones para cambiar color, tamaño y peso tipográfico
+de cualquier elemento desde controles de formulario:
+
+```ts
+// src/hooks/useStyles.ts
+
+import { useState, useCallback } from 'react'
+import type { CSSProperties } from 'react'
+
+interface UseStylesReturn {
+  style:    CSSProperties
+  setColor: (color: string) => void
+  setSize:  (size: number) => void
+  setBold:  (bold: boolean) => void
+  reset:    () => void
+}
+
+const DEFAULT: CSSProperties = {
+  color:      '#111827',
+  fontSize:   16,
+  fontWeight: 400,
+}
+
+export function useStyles(
+  initial: CSSProperties = DEFAULT
+): UseStylesReturn {
+  const [style, setStyle] = useState<CSSProperties>(initial)
+
+  const setColor = useCallback((color: string) => {
+    setStyle(prev => ({ ...prev, color }))
+  }, [])
+
+  const setSize = useCallback((size: number) => {
+    setStyle(prev => ({ ...prev, fontSize: size }))
+  }, [])
+
+  const setBold = useCallback((bold: boolean) => {
+    setStyle(prev => ({ ...prev, fontWeight: bold ? 700 : 400 }))
+  }, [])
+
+  const reset = useCallback(() => setStyle(initial), [initial])
+
+  return { style, setColor, setSize, setBold, reset }
+}
+```
+
+### `src/components/LiveStyleEditor.tsx`
+
+```tsx
+// src/components/LiveStyleEditor.tsx
+
+import { useStyles } from '../hooks/useStyles'
+
+export default function LiveStyleEditor() {
+  const { style, setColor, setSize, setBold, reset } = useStyles({
+    color:      '#111827',
+    fontSize:   16,
+    fontWeight: 400,
+  })
+
+  return (
+    <div style={{
+      border:       '1px solid var(--border)',
+      background:   'var(--card)',
+      borderRadius: 10,
+      padding:      16,
+    }}>
+      <h3 style={{ margin: '0 0 12px', color: 'var(--accent)', fontWeight: 800 }}>
+        Hook useStyles — editor en tiempo real
+      </h3>
+
+      {/* Controles */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, color: 'var(--muted)' }}>
+          Color
+          <input
+            type="color"
+            defaultValue="#111827"
+            onChange={e => setColor(e.target.value)}
+            style={{ width: 48, height: 32, border: 'none', cursor: 'pointer' }}
+          />
+        </label>
+
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, color: 'var(--muted)' }}>
+          Tamaño
+          <input
+            type="range"
+            min={12}
+            max={36}
+            defaultValue={16}
+            onChange={e => setSize(Number(e.target.value))}
+          />
+        </label>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--muted)', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            onChange={e => setBold(e.target.checked)}
+          />
+          Negrita
+        </label>
+
+        <button
+          onClick={reset}
+          style={{
+            padding:      '4px 12px',
+            border:       '1px solid var(--border)',
+            borderRadius: 6,
+            background:   'transparent',
+            color:        'var(--muted)',
+            cursor:       'pointer',
+            fontSize:     13,
+            alignSelf:    'flex-end',
+          }}
+        >
+          Reset
+        </button>
+      </div>
+
+      {/* Preview en tiempo real */}
+      <div style={{
+        padding:      12,
+        border:       '1px dashed var(--border)',
+        borderRadius: 8,
+        background:   'var(--bg)',
+      }}>
+        <p style={{ margin: 0, ...style }}>
+          Este texto cambia de estilo en tiempo real usando el hook useStyles.
+        </p>
+      </div>
+    </div>
+  )
+}
+```
+
+### Prueba esto
+
+- Mueve el slider de tamaño hasta el máximo — observa el texto crecer a 36px en tiempo real sin recargar la página
+- Activa "Negrita" y luego haz clic en "Reset" — el estilo vuelve exactamente al estado inicial definido en `DEFAULT`
+- Cambia el color con el picker y luego activa "Negrita" — el color se mantiene porque `setBold` usa el operador spread `{ ...prev, fontWeight }` en lugar de reemplazar el estado completo
+- Añade una función `setItalic` al hook siguiendo el mismo patrón que `setBold` — agrega un checkbox en `LiveStyleEditor` para activar/desactivar la cursiva
+- Modifica `DEFAULT` para que `fontSize` sea `24` en lugar de `16` — al montar el componente el texto aparece con 24px; haz clic en "Reset" y confirma que vuelve a 24px
+
+---
+
+### `src/hooks/useHover.ts`
+
+Encapsula los event handlers `onMouseEnter`/`onMouseLeave` y la lógica
+de mezclar estilos base con estilos de hover:
+
+```ts
+// src/hooks/useHover.ts
+
+import { useState, useCallback } from 'react'
+import type { CSSProperties } from 'react'
+
+interface UseHoverReturn {
+  hoverProps: {
+    onMouseEnter: () => void
+    onMouseLeave: () => void
+  }
+  style: CSSProperties
+}
+
+export function useHover(
+  baseStyle:  CSSProperties,
+  hoverStyle: CSSProperties
+): UseHoverReturn {
+  const [hovered, setHovered] = useState(false)
+
+  const onMouseEnter = useCallback(() => setHovered(true),  [])
+  const onMouseLeave = useCallback(() => setHovered(false), [])
+
+  return {
+    hoverProps: { onMouseEnter, onMouseLeave },
+    style:      hovered ? { ...baseStyle, ...hoverStyle } : baseStyle,
+  }
+}
+```
+
+### `src/components/HoverDemo.tsx`
+
+```tsx
+// src/components/HoverDemo.tsx
+
+import { useHover } from '../hooks/useHover'
+
+export default function HoverDemo() {
+  const btn1 = useHover(
+    {
+      padding: '10px 20px', background: '#0070f3', color: 'white',
+      border: 'none', borderRadius: 8, cursor: 'pointer',
+      fontWeight: 600, transition: 'all 0.2s',
+    },
+    {
+      background: '#2563eb',
+      transform:  'translateY(-2px)',
+      boxShadow:  '0 4px 12px rgba(0,112,243,0.35)',
+    }
+  )
+
+  const btn2 = useHover(
+    {
+      padding: '10px 20px', background: 'transparent', color: 'var(--accent)',
+      border: '1px solid var(--accent)', borderRadius: 8, cursor: 'pointer',
+      fontWeight: 600, transition: 'all 0.2s',
+    },
+    { background: 'var(--accent)', color: 'white' }
+  )
+
+  const card = useHover(
+    {
+      border: '1px solid var(--border)', background: 'var(--card)',
+      borderRadius: 10, padding: 16, transition: 'all 0.2s', cursor: 'default',
+    },
+    {
+      borderColor: 'var(--accent)',
+      boxShadow:   '0 4px 16px rgba(0,0,0,0.08)',
+    }
+  )
+
+  return (
+    <div {...card.hoverProps} style={card.style}>
+      <h3 style={{ margin: '0 0 12px', color: 'var(--accent)', fontWeight: 800 }}>
+        Hook useHover — estilos al pasar el cursor
+      </h3>
+      <p style={{ margin: '0 0 14px', color: 'var(--muted)', fontSize: 14 }}>
+        Pasa el cursor sobre la tarjeta y sobre los botones para ver los efectos.
+        El hook devuelve <code>hoverProps</code> y el <code>style</code> mezclado.
+      </p>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button {...btn1.hoverProps} style={btn1.style}>Hover elevación</button>
+        <button {...btn2.hoverProps} style={btn2.style}>Hover relleno</button>
+      </div>
+    </div>
+  )
+}
+```
+
+### Prueba esto
+
+- Pasa el cursor sobre el botón "Hover elevación" — observa la sombra y el `translateY(-2px)` que lo eleva visualmente; aleja el cursor y vuelve al estado base
+- Pasa el cursor sobre la tarjeta — el borde cambia a `var(--accent)` y aparece la sombra; el hook `useHover` en `card` aplica el mismo patrón que en los botones
+- Cambia `transform: 'translateY(-2px)'` a `transform: 'translateY(-6px)'` en `btn1` — el efecto de elevación es más pronunciado al hacer hover
+- Añade `opacity: 0.8` al `hoverStyle` de `btn2` — el botón se vuelve ligeramente transparente además de cambiar de color al pasar el cursor
+- Cambia `transition: 'all 0.2s'` a `transition: 'all 1s'` en el `baseStyle` de `btn1` — el efecto de hover aplica en cámara lenta durante 1 segundo
+
+---
+
+## 6 · Theming con Context + CSS variables
+
+El patrón más robusto para tema claro/oscuro: las CSS variables se definen
+en un archivo `.css` con dos bloques (`:root` y `[data-theme="dark"]`),
+y un Context de React gestiona qué bloque está activo.
+
+### `src/theme/theme.css`
+
+```css
+/* src/theme/theme.css */
+
+:root {
+  --bg:     #ffffff;
+  --card:   #f9fafb;
+  --border: #e5e7eb;
+  --text:   #111827;
+  --accent: #0070f3;
+  --muted:  #6b7280;
+}
+
+[data-theme="dark"] {
+  --bg:     #0f172a;
+  --card:   #1e293b;
+  --border: #334155;
+  --text:   #f1f5f9;
+  --accent: #60a5fa;
+  --muted:  #94a3b8;
+}
+```
+
+### `src/theme/ThemeContext.tsx`
+
+```tsx
+// src/theme/ThemeContext.tsx
+// React 19 — <ThemeContext value={...}> sin .Provider
+
+import { createContext, useContext, useState } from 'react'
+
+type Theme = 'light' | 'dark'
+
+interface ThemeContextValue {
+  theme:       Theme
+  toggleTheme: () => void
+}
+
+const ThemeContext = createContext<ThemeContextValue | null>(null)
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [theme, setTheme] = useState<Theme>('light')
+
+  function toggleTheme() {
+    setTheme(t => t === 'light' ? 'dark' : 'light')
+  }
+
+  return (
+    <ThemeContext value={{ theme, toggleTheme }}>
+      <div
+        data-theme={theme}
+        style={{
+          background: 'var(--bg)',
+          color:      'var(--text)',
+          minHeight:  '100vh',
+          transition: 'background 0.25s, color 0.25s',
+        }}
       >
-        ✕
-      </button>
-    </div>
+        {children}
+      </div>
+    </ThemeContext>
   )
 }
 
-export default function LabTwAlert() {
-  const [alerts, setAlerts] = useState<AlertType[]>(['success', 'error', 'warning', 'info'])
-
-  const remove = (type: AlertType) =>
-    setAlerts(prev => prev.filter(a => a !== type))
-
-  return (
-    <main className="min-h-screen bg-slate-950 text-white p-8">
-      <h2 className="text-xl font-extrabold mb-1">LAB: Alerts</h2>
-      <p className="text-white/60 mb-6 text-sm">Cuatro variantes con cierre individual.</p>
-
-      <div className="flex flex-col gap-3 max-w-xl">
-        {alerts.map(type => (
-          <Alert
-            key={type}
-            type={type}
-            message={`Alerta de tipo ${type} — haz clic en ✕ para cerrar.`}
-            onClose={() => remove(type)}
-          />
-        ))}
-        {alerts.length === 0 && (
-          <button
-            onClick={() => setAlerts(['success', 'error', 'warning', 'info'])}
-            className="self-start rounded-xl border border-white/20 px-4 py-2 text-sm hover:bg-white/10 transition"
-          >
-            Restaurar alertas
-          </button>
-        )}
-      </div>
-    </main>
-  )
+export function useTheme(): ThemeContextValue {
+  const ctx = useContext(ThemeContext)
+  if (!ctx) throw new Error('useTheme debe usarse dentro de ThemeProvider')
+  return ctx
 }
 ```
 
----
-
-### `src/lab/LabTwCard.tsx`
+### `src/components/ThemePanel.tsx`
 
 ```tsx
-// src/lab/LabTwCard.tsx
+// src/components/ThemePanel.tsx
 
-interface CourseCardProps {
-  title:    string
-  level:    'Básico' | 'Intermedio' | 'Avanzado'
-  duration: string
-  tag?:     string
-}
+import { useTheme } from '../theme/ThemeContext'
 
-const LEVEL_COLORS: Record<CourseCardProps['level'], string> = {
-  Básico:     'border-emerald-400/30 bg-emerald-400/10 text-emerald-300',
-  Intermedio: 'border-amber-400/30 bg-amber-400/10 text-amber-300',
-  Avanzado:   'border-red-400/30 bg-red-400/10 text-red-300',
-}
-
-function CourseCard({ title, level, duration, tag }: CourseCardProps) {
-  return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-white/20 transition">
-      <div className="flex items-center justify-between">
-        <span className={`inline-block rounded-full border px-3 py-0.5 text-xs font-semibold ${LEVEL_COLORS[level]}`}>
-          {level}
-        </span>
-        {tag && (
-          <span className="rounded-full border border-white/20 bg-white/5 px-3 py-0.5 text-xs text-white/60">
-            {tag}
-          </span>
-        )}
-      </div>
-      <h3 className="font-bold text-white">{title}</h3>
-      <p className="text-sm text-white/60">Duración: {duration}</p>
-      <button className="mt-auto self-start rounded-xl border border-white/20 px-4 py-1.5 text-sm font-semibold text-white/80 hover:bg-white/10 transition">
-        Ver curso →
-      </button>
-    </div>
-  )
-}
-
-export default function LabTwCard() {
-  const courses: CourseCardProps[] = [
-    { title: 'React + TypeScript', level: 'Básico',     duration: '12h', tag: 'Nuevo'   },
-    { title: 'Hooks avanzados',    level: 'Intermedio', duration: '8h',  tag: 'Popular' },
-    { title: 'Testing + Vitest',   level: 'Avanzado',   duration: '6h'                  },
-  ]
+export default function ThemePanel() {
+  const { theme, toggleTheme } = useTheme()
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white p-8">
-      <h2 className="text-xl font-extrabold mb-1">LAB: Cards</h2>
-      <p className="text-white/60 mb-6 text-sm">Cards tipadas con variante de nivel.</p>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 max-w-4xl">
-        {courses.map(c => <CourseCard key={c.title} {...c} />)}
-      </div>
-    </main>
-  )
-}
-```
-
----
-
-### `src/lab/LabTwForm.tsx`
-
-```tsx
-// src/lab/LabTwForm.tsx
-
-import { useState } from 'react'
-
-interface FormValues {
-  name:  string
-  email: string
-  role:  string
-}
-
-type FormErrors = Partial<Record<keyof FormValues, string>>
-
-export default function LabTwForm() {
-  const [values,  setValues]  = useState<FormValues>({ name: '', email: '', role: 'viewer' })
-  const [errors,  setErrors]  = useState<FormErrors>({})
-  const [success, setSuccess] = useState(false)
-
-  function validate(): boolean {
-    const e: FormErrors = {}
-    if (!values.name.trim())         e.name  = 'El nombre es requerido'
-    if (!values.email.includes('@')) e.email = 'Email inválido'
-    setErrors(e)
-    return Object.keys(e).length === 0
-  }
-
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    if (!validate()) return
-    setSuccess(true)
-    setValues({ name: '', email: '', role: 'viewer' })
-    setTimeout(() => setSuccess(false), 3000)
-  }
-
-  // Función que devuelve clases distintas si el campo tiene error
-  const inputClass = (field: keyof FormValues) =>
-    `h-11 w-full rounded-xl border bg-white/5 px-4 text-white placeholder:text-white/40 outline-none transition focus:ring-2 ${
-      errors[field]
-        ? 'border-red-500/60 focus:ring-red-500/30'
-        : 'border-white/10 focus:ring-blue-500/40'
-    }`
-
-  return (
-    <main className="min-h-screen bg-slate-950 text-white p-8">
-      <h2 className="text-xl font-extrabold mb-1">LAB: Form</h2>
-      <p className="text-white/60 mb-6 text-sm">Con validación y feedback visual.</p>
-
-      {success && (
-        <div className="mb-4 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-4 text-emerald-300 text-sm max-w-md">
-          ✅ Registro enviado correctamente
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4 max-w-md">
-        <div>
-          <label className="mb-1 block text-sm font-semibold text-white/80">Nombre</label>
-          <input
-            className={inputClass('name')}
-            type="text"
-            placeholder="Ana García"
-            value={values.name}
-            onChange={e => {
-              setValues(v => ({ ...v, name: e.target.value }))
-              setErrors(v => ({ ...v, name: undefined }))
-            }}
-          />
-          {errors.name && <p className="mt-1 text-xs text-red-400">{errors.name}</p>}
-        </div>
-
-        <div>
-          <label className="mb-1 block text-sm font-semibold text-white/80">Email</label>
-          <input
-            className={inputClass('email')}
-            type="email"
-            placeholder="ana@ejemplo.com"
-            value={values.email}
-            onChange={e => {
-              setValues(v => ({ ...v, email: e.target.value }))
-              setErrors(v => ({ ...v, email: undefined }))
-            }}
-          />
-          {errors.email && <p className="mt-1 text-xs text-red-400">{errors.email}</p>}
-        </div>
-
-        <div>
-          <label className="mb-1 block text-sm font-semibold text-white/80">Rol</label>
-          <select
-            className="h-11 w-full rounded-xl border border-white/10 bg-white/5 px-4 text-white outline-none focus:ring-2 focus:ring-blue-500/40"
-            value={values.role}
-            onChange={e => setValues(v => ({ ...v, role: e.target.value }))}
-          >
-            <option value="viewer" className="bg-slate-900">Viewer</option>
-            <option value="editor" className="bg-slate-900">Editor</option>
-            <option value="admin"  className="bg-slate-900">Admin</option>
-          </select>
-        </div>
-
+    <div style={{
+      border:       '1px solid var(--border)',
+      background:   'var(--card)',
+      borderRadius: 10,
+      padding:      16,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <h3 style={{ margin: 0, color: 'var(--accent)', fontWeight: 800 }}>
+          Theming con Context + CSS variables
+        </h3>
         <button
-          type="submit"
-          className="h-11 rounded-xl bg-blue-600 font-semibold hover:bg-blue-500 transition"
+          onClick={toggleTheme}
+          style={{
+            padding:      '6px 14px',
+            border:       '1px solid var(--border)',
+            borderRadius: 8,
+            background:   'var(--bg)',
+            color:        'var(--text)',
+            cursor:       'pointer',
+            fontWeight:   600,
+            fontSize:     13,
+          }}
         >
-          Registrar
+          {theme === 'light' ? '🌙 Modo oscuro' : '☀️ Modo claro'}
         </button>
-      </form>
-    </main>
-  )
-}
-```
-
----
-
-### `src/lab/LabTwTable.tsx`
-
-```tsx
-// src/lab/LabTwTable.tsx
-
-import { useState } from 'react'
-
-interface Product {
-  id:       number
-  name:     string
-  category: string
-  price:    number
-  active:   boolean
-}
-
-const PRODUCTS: Product[] = [
-  { id: 1, name: 'Teclado mecánico',  category: 'Periféricos', price: 89.99,  active: true  },
-  { id: 2, name: 'Monitor 27"',       category: 'Pantallas',   price: 349.99, active: true  },
-  { id: 3, name: 'Mouse inalámbrico', category: 'Periféricos', price: 29.99,  active: false },
-  { id: 4, name: 'Webcam HD',         category: 'Cámaras',     price: 59.99,  active: true  },
-  { id: 5, name: 'Auriculares BT',    category: 'Audio',       price: 149.99, active: false },
-]
-
-export default function LabTwTable() {
-  const [search, setSearch] = useState('')
-
-  const filtered = PRODUCTS.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.category.toLowerCase().includes(search.toLowerCase())
-  )
-
-  return (
-    <main className="min-h-screen bg-slate-950 text-white p-8">
-      <h2 className="text-xl font-extrabold mb-1">LAB: Table</h2>
-      <p className="text-white/60 mb-4 text-sm">Tabla responsiva con búsqueda en tiempo real.</p>
-
-      <input
-        className="mb-4 h-10 w-full max-w-xs rounded-xl border border-white/10 bg-white/5 px-4 text-sm text-white placeholder:text-white/40 outline-none focus:ring-2 focus:ring-blue-500/40"
-        placeholder="Buscar producto o categoría..."
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-      />
-
-      <div className="overflow-x-auto rounded-2xl border border-white/10">
-        <table className="min-w-full text-sm">
-          <thead className="bg-white/5 text-white/70">
-            <tr>
-              {['#', 'Nombre', 'Categoría', 'Precio', 'Estado'].map(h => (
-                <th key={h} className="px-4 py-3 text-left font-semibold">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(p => (
-              <tr key={p.id} className="border-t border-white/10 hover:bg-white/5 transition">
-                <td className="px-4 py-3 text-white/50">{p.id}</td>
-                <td className="px-4 py-3 font-semibold">{p.name}</td>
-                <td className="px-4 py-3 text-white/70">{p.category}</td>
-                <td className="px-4 py-3 font-semibold">${p.price.toFixed(2)}</td>
-                <td className="px-4 py-3">
-                  <span className={`inline-block rounded-full border px-3 py-0.5 text-xs font-semibold ${
-                    p.active
-                      ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300'
-                      : 'border-white/10 bg-white/5 text-white/50'
-                  }`}>
-                    {p.active ? 'Activo' : 'Inactivo'}
-                  </span>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-white/40">
-                  Sin resultados.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </main>
-  )
-}
-```
-
----
-
-### `src/AppLab.tsx`
-
-```tsx
-// src/AppLab.tsx
-
-import { useState } from 'react'
-import LabTwButtons from './lab/LabTwButtons'
-import LabTwAlert   from './lab/LabTwAlert'
-import LabTwCard    from './lab/LabTwCard'
-import LabTwForm    from './lab/LabTwForm'
-import LabTwTable   from './lab/LabTwTable'
-
-type LabKey = 'buttons' | 'alert' | 'card' | 'form' | 'table'
-
-export default function AppLab() {
-  const [lab, setLab] = useState<LabKey>('buttons')
-
-  return (
-    <div className="min-h-screen bg-slate-950">
-      <div className="flex items-center gap-4 border-b border-white/10 bg-slate-900 px-4 py-2">
-        <span className="font-bold text-white text-sm">Tailwind v4 LAB</span>
-        <select
-          className="rounded-lg border border-white/10 bg-slate-800 px-3 py-1 text-sm text-white outline-none"
-          value={lab}
-          onChange={e => setLab(e.target.value as LabKey)}
-        >
-          <option value="buttons">Buttons</option>
-          <option value="alert">Alerts</option>
-          <option value="card">Cards</option>
-          <option value="form">Form</option>
-          <option value="table">Table</option>
-        </select>
       </div>
 
-      {lab === 'buttons' && <LabTwButtons />}
-      {lab === 'alert'   && <LabTwAlert />}
-      {lab === 'card'    && <LabTwCard />}
-      {lab === 'form'    && <LabTwForm />}
-      {lab === 'table'   && <LabTwTable />}
+      <p style={{ margin: '0 0 12px', color: 'var(--muted)', fontSize: 14 }}>
+        El atributo <code>data-theme</code> en el contenedor raíz activa el bloque
+        CSS correspondiente. Todos los componentes heredan las variables sin
+        necesidad de props ni contexto adicional.
+      </p>
+
+      {/* Paleta visual de las variables activas */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {['--bg', '--card', '--border', '--text', '--accent', '--muted'].map(v => (
+          <div
+            key={v}
+            style={{
+              padding:      '4px 10px',
+              background:   `var(${v})`,
+              border:       '1px solid var(--border)',
+              borderRadius: 6,
+              fontSize:     12,
+              color:        v === '--bg' || v === '--card' ? 'var(--text)' : 'var(--bg)',
+            }}
+          >
+            {v}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -546,356 +726,89 @@ export default function AppLab() {
 
 ---
 
-## Fase 2 — Home: landing de cursos con Router
-
----
-
-### `src/components/tw/TwNavbar.tsx`
-
-```tsx
-// src/components/tw/TwNavbar.tsx
-
-import { NavLink } from 'react-router-dom'
-
-// Función que devuelve clases según si la ruta está activa
-const linkClass = ({ isActive }: { isActive: boolean }) =>
-  `rounded-xl px-3 py-2 text-sm font-semibold transition border ${
-    isActive
-      ? 'border-white/20 bg-white/10 text-white'
-      : 'border-transparent text-white/60 hover:text-white hover:bg-white/10'
-  }`
-
-export default function TwNavbar() {
-  return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/80 backdrop-blur">
-      <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-        <span className="font-extrabold tracking-tight text-white">DevCursos</span>
-        <nav className="flex items-center gap-1">
-          <NavLink to="/"      className={linkClass} end>Inicio</NavLink>
-          <NavLink to="/about" className={linkClass}>Acerca de</NavLink>
-        </nav>
-      </div>
-    </header>
-  )
-}
-```
-
-> `NavLink` acepta `className` como función — recibe `{ isActive }` y devuelve
-> el string de clases. El mismo patrón que `style` en React Router.
-
----
-
-### `src/components/tw/TwHero.tsx`
-
-```tsx
-// src/components/tw/TwHero.tsx
-
-export default function TwHero() {
-  return (
-    <section className="bg-slate-950 py-16">
-      <div className="mx-auto max-w-5xl px-4">
-        <span className="inline-block rounded-full border border-blue-400/30 bg-blue-400/10 px-3 py-1 text-xs font-semibold text-blue-300 mb-4">
-          Tailwind CSS v4
-        </span>
-        <h1 className="text-3xl md:text-5xl font-extrabold text-white tracking-tight mb-4">
-          Aprende React con<br />
-          <span className="text-blue-400">estilos modernos</span>
-        </h1>
-        <p className="text-white/60 text-lg max-w-xl mb-8">
-          Utility-first CSS directamente en tus componentes React.
-          Sin archivos CSS externos, sin colisiones de clases.
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <button className="rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-500 transition">
-            Ver cursos
-          </button>
-          <button className="rounded-xl border border-white/20 px-6 py-3 font-semibold text-white/80 hover:bg-white/10 transition">
-            Plan de estudio
-          </button>
-        </div>
-      </div>
-    </section>
-  )
-}
-```
-
----
-
-### `src/components/tw/TwCourseGrid.tsx`
-
-```tsx
-// src/components/tw/TwCourseGrid.tsx
-
-interface Course {
-  id:       number
-  title:    string
-  level:    'Básico' | 'Intermedio' | 'Avanzado'
-  duration: string
-  tag?:     string
-}
-
-const COURSES: Course[] = [
-  { id: 1, title: 'React + TypeScript',   level: 'Básico',     duration: '12h', tag: 'Nuevo'   },
-  { id: 2, title: 'Hooks avanzados',      level: 'Intermedio', duration: '8h',  tag: 'Popular' },
-  { id: 3, title: 'Testing con Vitest',   level: 'Avanzado',   duration: '6h'                  },
-  { id: 4, title: 'TanStack Query',       level: 'Intermedio', duration: '5h',  tag: 'Nuevo'   },
-  { id: 5, title: 'React Router v7',      level: 'Básico',     duration: '4h'                  },
-  { id: 6, title: 'Performance patterns', level: 'Avanzado',   duration: '7h',  tag: 'Popular' },
-]
-
-const LEVEL: Record<Course['level'], string> = {
-  Básico:     'border-emerald-400/30 bg-emerald-400/10 text-emerald-300',
-  Intermedio: 'border-amber-400/30 bg-amber-400/10 text-amber-300',
-  Avanzado:   'border-red-400/30 bg-red-400/10 text-red-300',
-}
-
-export default function TwCourseGrid() {
-  return (
-    <section className="bg-slate-950 py-12">
-      <div className="mx-auto max-w-5xl px-4">
-        <h2 className="text-2xl font-extrabold text-white mb-2">Cursos disponibles</h2>
-        <p className="text-white/50 mb-8">Selecciona el nivel que mejor se adapte a ti.</p>
-
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {COURSES.map(course => (
-            <div
-              key={course.id}
-              className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-white/20 transition"
-            >
-              <div className="flex items-center justify-between">
-                <span className={`rounded-full border px-3 py-0.5 text-xs font-semibold ${LEVEL[course.level]}`}>
-                  {course.level}
-                </span>
-                {course.tag && (
-                  <span className="rounded-full border border-white/15 bg-white/5 px-3 py-0.5 text-xs text-white/50">
-                    {course.tag}
-                  </span>
-                )}
-              </div>
-              <h3 className="font-bold text-white">{course.title}</h3>
-              <p className="text-sm text-white/50">Duración: {course.duration}</p>
-              <button className="mt-auto self-start rounded-xl border border-white/20 px-4 py-1.5 text-sm font-semibold text-white/70 hover:bg-white/10 transition">
-                Ver curso →
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-```
-
----
-
-### `src/components/tw/TwNewsletter.tsx`
-
-```tsx
-// src/components/tw/TwNewsletter.tsx
-
-import { useState } from 'react'
-
-export default function TwNewsletter() {
-  const [email,   setEmail]   = useState('')
-  const [success, setSuccess] = useState(false)
-
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setSuccess(true)
-    setEmail('')
-    setTimeout(() => setSuccess(false), 3000)
-  }
-
-  return (
-    <section className="border-t border-white/10 bg-slate-950 py-16">
-      <div className="mx-auto max-w-5xl px-4 text-center">
-        <h2 className="text-2xl font-extrabold text-white mb-2">Mantente actualizado</h2>
-        <p className="text-white/50 mb-8 max-w-md mx-auto">
-          Recibe novedades sobre nuevos cursos y contenido exclusivo.
-        </p>
-
-        {success && (
-          <div className="mb-6 inline-block rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-6 py-3 text-emerald-300 text-sm">
-            ✅ Suscripción registrada (demo)
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="flex justify-center gap-2 flex-wrap">
-          <input
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            placeholder="tu@correo.com"
-            required
-            className="h-11 w-72 rounded-xl border border-white/10 bg-white/5 px-4 text-white placeholder:text-white/40 outline-none focus:ring-2 focus:ring-blue-500/40"
-          />
-          <button
-            type="submit"
-            className="h-11 rounded-xl bg-blue-600 px-6 font-semibold text-white hover:bg-blue-500 transition"
-          >
-            Suscribirme
-          </button>
-        </form>
-      </div>
-    </section>
-  )
-}
-```
-
----
-
-### `src/components/tw/TwFooter.tsx`
-
-```tsx
-// src/components/tw/TwFooter.tsx
-
-export default function TwFooter() {
-  return (
-    <footer className="border-t border-white/10 bg-slate-950 py-6">
-      <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4">
-        <span className="font-extrabold text-white">DevCursos</span>
-        <span className="text-sm text-white/40">
-          Construido con Tailwind CSS v4 + React 19
-        </span>
-        <div className="flex gap-4">
-          <a href="#" className="text-sm text-white/50 hover:text-white transition">Docs</a>
-          <a href="#" className="text-sm text-white/50 hover:text-white transition">GitHub</a>
-        </div>
-      </div>
-    </footer>
-  )
-}
-```
-
----
-
-### `src/pages/HomeTW.tsx`
-
-```tsx
-// src/pages/HomeTW.tsx
-
-import TwHero       from '../components/tw/TwHero'
-import TwCourseGrid from '../components/tw/TwCourseGrid'
-import TwNewsletter from '../components/tw/TwNewsletter'
-
-export default function HomeTW() {
-  return (
-    <>
-      <TwHero />
-      <TwCourseGrid />
-      <TwNewsletter />
-    </>
-  )
-}
-```
-
----
-
-### `src/pages/AboutTW.tsx`
-
-```tsx
-// src/pages/AboutTW.tsx
-
-export default function AboutTW() {
-  return (
-    <main className="min-h-screen bg-slate-950 py-16">
-      <div className="mx-auto max-w-2xl px-4">
-        <h1 className="text-2xl font-extrabold text-white mb-6">Acerca de este proyecto</h1>
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-          <ul className="space-y-2 text-white/70 text-sm">
-            <li className="flex items-center gap-2">
-              <span className="text-blue-400">→</span> React 19 + TypeScript
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="text-blue-400">→</span> Tailwind CSS v4 con plugin de Vite
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="text-blue-400">→</span> React Router v7
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="text-blue-400">→</span> Sin tailwind.config.ts — configuración en CSS
-            </li>
-          </ul>
-        </div>
-      </div>
-    </main>
-  )
-}
-```
-
----
-
-### `src/AppHome.tsx`
-
-```tsx
-// src/AppHome.tsx
-
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import TwNavbar from './components/tw/TwNavbar'
-import TwFooter from './components/tw/TwFooter'
-import HomeTW   from './pages/HomeTW'
-import AboutTW  from './pages/AboutTW'
-
-export default function AppHome() {
-  return (
-    <BrowserRouter>
-      <TwNavbar />
-      <Routes>
-        <Route path="/"      element={<HomeTW />} />
-        <Route path="/about" element={<AboutTW />} />
-      </Routes>
-      <TwFooter />
-    </BrowserRouter>
-  )
-}
-```
-
----
-
-### `src/App.tsx` — alterna entre fases
+## Navegador de pasos — `App.tsx`
 
 ```tsx
 // src/App.tsx
 
-import AppLab from './AppLab'
-// import AppHome from './AppHome'
+import { ThemeProvider }    from './theme/ThemeContext'
+import CssGlobalDemo        from './components/CssGlobalDemo'
+import InlineStyleDemo      from './components/InlineStyleDemo'
+import CssModuleDemo        from './components/CssModuleDemo'
+import StyledComponentsDemo from './components/StyledComponentsDemo'
+import LiveStyleEditor      from './components/LiveStyleEditor'
+import HoverDemo            from './components/HoverDemo'
+import ThemePanel           from './components/ThemePanel'
+import './theme/theme.css'
+
+// ┌──────────────────────────────────────────────────────────────────────┐
+// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
+// │  1  CssGlobalDemo        — clases globales y riesgo de colisión     │
+// │  2  InlineStyleDemo      — objetos JS, sin :hover ni @media         │
+// │  3  CssModuleDemo        — scope local, :hover con CSS Modules      │
+// │  4  StyledComponentsDemo — CSS-in-JS con props transient ($)        │
+// │  5  LiveStyleEditor      — hook useStyles para estilos dinámicos    │
+// │  6  HoverDemo            — hook useHover para efectos hover         │
+// │  7  ThemePanel           — Context + CSS variables para theming     │
+// └──────────────────────────────────────────────────────────────────────┘
+const PASO = 1
 
 export default function App() {
-  return <AppLab />
-  // Fase 2 — descomenta y comenta la línea anterior:
-  // return <AppHome />
+  const content =
+    PASO === 1 ? <CssGlobalDemo /> :
+    PASO === 2 ? <InlineStyleDemo /> :
+    PASO === 3 ? <CssModuleDemo /> :
+    PASO === 4 ? <StyledComponentsDemo /> :
+    PASO === 5 ? <LiveStyleEditor /> :
+    PASO === 6 ? <HoverDemo /> :
+    PASO === 7 ? <ThemePanel /> :
+    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
+
+  return (
+    <ThemeProvider>
+      <main style={{ maxWidth: 640, margin: '0 auto', padding: '32px 16px' }}>
+        {content}
+      </main>
+    </ThemeProvider>
+  )
 }
 ```
 
+### Prueba esto
+
+- Cambia `PASO = 1` y guarda — ve clases globales aplicadas con `className`
+- Cambia a `PASO = 2` — observa que los objetos JS de estilo aceptan camelCase
+- Cambia a `PASO = 3` — inspecciona en DevTools el nombre `Button_button__XXXXX` generado por CSS Modules
+- Cambia a `PASO = 4` — modifica props `$variant` o `$size` para ver cómo cambia el estilo con styled-components
+- Cambia a `PASO = 5` — ajusta los controles del `LiveStyleEditor` y ve los cambios en tiempo real
+- Cambia a `PASO = 6` — pasa el cursor sobre el elemento y verifica el estado hover via `useHover`
+- Cambia a `PASO = 7` — activa el toggle de tema oscuro y observa cómo `ThemePanel` lee las CSS variables vía Context
+
 ---
 
-## Clases de Tailwind más usadas — referencia rápida
+## Cuándo usar cada enfoque
 
-| Categoría | Ejemplos |
+| Situación | Enfoque recomendado |
 |---|---|
-| Colores de fondo | `bg-slate-950`, `bg-white/5`, `bg-blue-600` |
-| Colores de texto | `text-white`, `text-white/60`, `text-blue-400` |
-| Bordes | `border`, `border-white/10`, `rounded-xl`, `rounded-2xl` |
-| Espaciado | `p-4`, `px-6`, `py-3`, `gap-3`, `space-y-2` |
-| Flexbox | `flex`, `items-center`, `justify-between`, `flex-wrap` |
-| Grid | `grid`, `grid-cols-3`, `sm:grid-cols-2`, `gap-4` |
-| Tipografía | `font-bold`, `font-extrabold`, `text-sm`, `text-xl`, `tracking-tight` |
-| Hover/transición | `hover:bg-blue-500`, `hover:text-white`, `transition` |
-| Responsive | `sm:grid-cols-2`, `md:text-5xl`, `lg:grid-cols-3` |
-| Opacidad | `text-white/60`, `bg-white/5`, `border-white/10` |
+| Estilos globales, reset, variables | CSS global |
+| Estilo calculado en runtime con JS | Inline styles |
+| Componentes con estilos propios y `:hover` | CSS Modules |
+| Componentes con muchas variantes por props | styled-components |
+| Tema claro/oscuro global | Context + CSS variables |
+| Cambiar estilos desde controles de UI | Hook `useStyles` |
 
 ---
 
-## Resumen de la página 17
+## Resumen de la página 3B
 
-- Tailwind v4 no usa `tailwind.config.ts` — la configuración se hace en CSS con `@theme`.
-- La instalación mínima es `npm install tailwindcss @tailwindcss/vite`, más el plugin en `vite.config.ts` y `@import "tailwindcss"` en el CSS raíz.
-- Las clases se aplican directamente en `className` — no hay archivos CSS separados por componente.
-- El patrón `Record<Tipo, string>` para mapear variantes a clases es más limpio que condicionales largos.
-- `NavLink` acepta `className` como función `({ isActive }) => string` — permite cambiar clases según la ruta activa sin lógica extra en el componente.
-- La opacidad se escribe directamente en la clase de color: `text-white/60` equivale a `color: rgba(255,255,255,0.6)`.
-- El grid responsivo se define con prefijos: `grid sm:grid-cols-2 lg:grid-cols-3` sin media queries en línea.
+- CSS global: rápido y simple, riesgo de colisión de nombres entre componentes.
+- Inline styles: totalmente dinámico pero sin `:hover`, `:focus` ni `@media`.
+- CSS Modules: nombres únicos automáticos, soporta `:hover` — el equilibrio para la mayoría de los casos.
+- styled-components v6: CSS-in-JS con scope, props tipadas y soporte completo de CSS. No instalar `@types/styled-components` — los tipos vienen incluidos. Props de estilo usan prefijo `$`.
+- CSS variables en `:root` y `[data-theme="dark"]` — el patrón más eficiente para theming. Los componentes leen las variables sin saber si el tema es claro u oscuro.
+- `useStyles` y `useHover` — encapsulan la lógica de cambio de estilos igual que cualquier otro hook de estado.
 
 ---
 
-> **Siguiente página →** Página 18: Ant Design v6 — LAB + dashboard de ventas.
+> **Siguiente página →** Página 4: `useState` en profundidad.
+> **Frameworks de estilos →** Páginas 16–19: React-Bootstrap, Tailwind CSS, Ant Design y Material UI.

@@ -1,101 +1,221 @@
-# Curso React.js + TypeScript — Página 3B
-## Módulo 1 · Fundamentos
-### Estilos en React: CSS global, inline, CSS Modules, styled-components y theming
+# Curso React.js + TypeScript — Página 13
+## Módulo 6 · Ecosistema
+### Testing con Vitest y React Testing Library
 
 ---
 
-## Los cuatro enfoques de estilos en React
+## ¿Por qué testear componentes React?
 
-React no impone ningún sistema de estilos — puedes usar cualquier combinación.
-Cada enfoque tiene sus ventajas y casos de uso claros:
+Los tests verifican que tus componentes se comportan como el usuario
+espera — no cómo están implementados internamente. React Testing Library
+(RTL) impone esta filosofía: **testea lo que el usuario ve y hace**,
+no los detalles del estado o las props.
 
-| Enfoque | Scope | Soporte `:hover` | Dinámico | Dependencia extra |
-|---|---|---|---|---|
-| CSS global | Global — puede colisionar | ✅ | Manual | ❌ |
-| Inline styles | Por elemento | ❌ | ✅ directo | ❌ |
-| CSS Modules | Local — sin colisión | ✅ | Manual | ❌ |
-| styled-components | Por componente | ✅ | ✅ por props | ✅ `styled-components` |
-
----
-
-## Instalación
-
-Solo `styled-components` requiere instalación extra.
-En v6 **los tipos ya están incluidos** — no necesitas `@types/styled-components`:
-
-```bash
-npm install styled-components
-# En v6 NO instales @types/styled-components — viene incluido
+```
+Tests de implementación (evitar)     Tests de comportamiento (preferir)
+─────────────────────────────        ─────────────────────────────────
+¿El estado es { count: 1 }?          ¿La pantalla muestra "Cuenta: 1"?
+¿Se llamó a setState?                 ¿El botón existe y es clickeable?
+¿La función interna se ejecutó?       ¿Se mostró el mensaje de error?
 ```
 
 ---
 
-## Estructura del proyecto
+## Instalación y configuración
+
+```bash
+npm install -D vitest @vitest/ui jsdom \
+  @testing-library/react \
+  @testing-library/jest-dom \
+  @testing-library/user-event
+```
+
+### Versiones actuales
+
+| Librería | Versión |
+|---|---|
+| `vitest` | ^4.1.0 |
+| `@testing-library/react` | ^16.3.2 |
+| `@testing-library/jest-dom` | ^6.9.1 |
+| `@testing-library/user-event` | ^14.6.1 |
+| `jsdom` | ^29.0.0 |
+
+---
+
+### `vite.config.ts` — añadir configuración de test
+
+```ts
+// vite.config.ts
+
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    environment: 'jsdom',      // simula el DOM del navegador
+    globals:     true,         // describe, it, expect disponibles sin import
+    setupFiles:  ['./src/test/setup.ts'],
+  },
+})
+```
+
+### `src/test/setup.ts`
+
+```ts
+// src/test/setup.ts
+
+import '@testing-library/jest-dom'
+// Extiende los matchers de Vitest con los de jest-dom:
+// toBeInTheDocument, toHaveTextContent, toBeVisible, etc.
+```
+
+### `tsconfig.app.json` — añadir tipos de Vitest
+
+```json
+{
+  "compilerOptions": {
+    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"]
+  }
+}
+```
+
+### Scripts en `package.json`
+
+```json
+{
+  "scripts": {
+    "test":       "vitest",
+    "test:run":   "vitest run",
+    "test:ui":    "vitest --ui",
+    "test:cover": "vitest run --coverage"
+  }
+}
+```
+
+### Prueba esto
+
+- Ejecuta `npm test` en la terminal — Vitest arranca en modo watch y muestra los resultados en tiempo real; cualquier cambio en los archivos relanza los tests automáticamente
+- Ejecuta `npm run test:ui` — se abre una interfaz visual en el navegador donde puedes ver el árbol de tests, filtrar por nombre y ver los errores con detalle
+- Cambia `globals: true` a `globals: false` en `vite.config.ts` — los tests fallan porque `describe`, `it` y `expect` ya no están disponibles sin importarlos explícitamente
+- Elimina temporalmente la línea `import '@testing-library/jest-dom'` de `setup.ts` — los matchers como `toBeInTheDocument` dejan de funcionar y TypeScript muestra errores de tipo
+- Ejecuta `npm run test:cover` — se genera un informe de cobertura que muestra qué líneas de código están cubiertas por tests y cuáles no
+- Añade `coverage: { reporter: ['text', 'html'] }` dentro de `test:` en `vite.config.ts` y vuelve a ejecutar `test:cover` — se genera una carpeta `coverage/` con un informe HTML navegable
+
+---
+
+## Estructura de archivos
 
 ```
 src/
-├── styles/
-│   ├── global.css          ← CSS global
-│   └── card.module.css     ← CSS Modules
-├── theme/
-│   ├── theme.css           ← CSS variables light/dark
-│   └── ThemeContext.tsx    ← Context para el tema
-├── hooks/
-│   ├── useStyles.ts        ← hook para cambiar estilos en tiempo real
-│   └── useHover.ts         ← hook para estilos al pasar el cursor
 ├── components/
-│   ├── CssGlobalDemo.tsx
-│   ├── InlineStyleDemo.tsx
-│   ├── CssModuleDemo.tsx
-│   ├── StyledComponentsDemo.tsx
-│   ├── LiveStyleEditor.tsx
-│   ├── HoverDemo.tsx
-│   └── ThemePanel.tsx
-├── App.tsx
-└── main.tsx
+│   ├── StatusBadge.tsx
+│   ├── Counter.tsx
+│   ├── SearchInput.tsx
+│   └── UserCard.tsx
+├── __tests__/                ← tests junto a src/
+│   ├── StatusBadge.test.tsx
+│   ├── Counter.test.tsx
+│   ├── SearchInput.test.tsx
+│   └── UserCard.test.tsx
+└── test/
+    └── setup.ts
 ```
+
+> Convención alternativa: colocar el test junto al componente
+> (`StatusBadge.test.tsx` en la misma carpeta que `StatusBadge.tsx`).
+> Ambas son válidas — lo importante es ser consistente en todo el proyecto.
 
 ---
 
-## 1 · CSS Global
+## Componentes a testear
 
-El enfoque más simple: un archivo `.css` que se importa directamente.
-Las clases son globales — cualquier componente que importe el archivo
-puede usarlas, pero también pueden colisionar con clases de otros archivos.
+Los componentes están diseñados con atributos de accesibilidad (`aria-label`,
+`role`, `data-testid`) que hacen los tests más robustos y descriptivos.
 
-### `src/styles/global.css`
+### `src/components/StatusBadge.tsx`
 
-```css
-/* src/styles/global.css */
+```tsx
+// src/components/StatusBadge.tsx
 
-.globalCard {
-  border:        1px solid var(--border);
-  border-radius: 10px;
-  padding:       16px;
+type BadgeStatus = 'active' | 'inactive' | 'pending'
+
+interface StatusBadgeProps {
+  status:  BadgeStatus
+  label?:  string
 }
 
-.globalTitle {
-  margin:      0 0 8px 0;
-  color:       var(--accent);
-  font-weight: 800;
+const config: Record<BadgeStatus, { bg: string; color: string; text: string }> = {
+  active:   { bg: '#dcfce7', color: '#166534', text: 'Activo'    },
+  inactive: { bg: '#f3f4f6', color: '#6b7280', text: 'Inactivo'  },
+  pending:  { bg: '#fef9c3', color: '#854d0e', text: 'Pendiente' },
+}
+
+export default function StatusBadge({ status, label }: StatusBadgeProps) {
+  const { bg, color, text } = config[status]
+  return (
+    <span
+      data-testid="status-badge"
+      style={{ backgroundColor: bg, color, padding: '2px 8px', borderRadius: 10, fontSize: 12 }}
+    >
+      {label ?? text}
+    </span>
+  )
 }
 ```
 
-### `src/components/CssGlobalDemo.tsx`
+### Prueba esto
+
+- Renderiza `<StatusBadge status="active" />` en `App.tsx` y observa el badge verde con el texto "Activo" — confirma que el componente funciona visualmente antes de escribir tests
+- Añade un cuarto valor `'error'` al tipo `BadgeStatus` sin actualizar el objeto `config` — TypeScript marca un error en tiempo de compilación porque `config[status]` puede ser `undefined`
+- Agrega `{ error: { bg: '#fef2f2', color: '#dc2626', text: 'Error' } }` a `config` — el nuevo estado queda disponible para los tests sin cambiar nada más en el componente
+- Cambia `data-testid="status-badge"` a `data-testid="badge"` — todos los tests que usen `getByTestId('status-badge')` fallarán; actualiza el testid en los tests para que vuelvan a pasar
+- Pasa `label="Conectado"` al componente — el texto "Conectado" reemplaza al texto por defecto "Activo" gracias al operador `??`
+- Elimina el atributo `data-testid` completamente del `span` — los tests que usen `getByTestId` fallan; como ejercicio, reescribe esos tests usando `getByText` en su lugar
+
+### `src/components/Counter.tsx`
 
 ```tsx
-// src/components/CssGlobalDemo.tsx
+// src/components/Counter.tsx
 
-import '../styles/global.css'
+import { useState } from 'react'
 
-export default function CssGlobalDemo() {
+interface CounterProps {
+  initialValue?:  number
+  step?:          number
+  onCountChange?: (count: number) => void
+}
+
+export default function Counter({
+  initialValue = 0,
+  step = 1,
+  onCountChange,
+}: CounterProps) {
+  const [count, setCount] = useState(initialValue)
+
+  function increment() {
+    const next = count + step
+    setCount(next)
+    onCountChange?.(next)
+  }
+
+  function decrement() {
+    const next = count - step
+    setCount(next)
+    onCountChange?.(next)
+  }
+
+  function reset() {
+    setCount(initialValue)
+    onCountChange?.(initialValue)
+  }
+
   return (
-    <div className="globalCard">
-      <h3 className="globalTitle">CSS Global</h3>
-      <p style={{ margin: 0, color: 'var(--muted)' }}>
-        Clases definidas en un archivo <code>.css</code> importado en el componente.
-        Scope global — pueden colisionar si dos componentes usan el mismo nombre de clase.
-      </p>
+    <div>
+      <p data-testid="count-display">Cuenta: {count}</p>
+      <button onClick={decrement}>Decrementar</button>
+      <button onClick={increment}>Incrementar</button>
+      <button onClick={reset}>Reset</button>
     </div>
   )
 }
@@ -103,697 +223,579 @@ export default function CssGlobalDemo() {
 
 ### Prueba esto
 
-- Cambia `.globalCard { border-radius: 10px }` a `border-radius: 0` en `global.css` — guarda y observa cómo el cambio afecta a todos los elementos que usen esa clase en la app
-- Renombra la clase `.globalTitle` a `.title` en el CSS y en el componente — observa que si otro componente ya tiene una clase `.title`, los estilos colisionarían en el DOM
-- Añade una segunda clase `.globalSubtitle { color: red; font-size: 12px }` en el archivo CSS e inyéctala en el componente con `className="globalSubtitle"` en el párrafo
-- Importa `global.css` desde dos componentes distintos — abre DevTools y comprueba que la hoja de estilos se incluye una sola vez en el DOM
-- Añade `font-family: monospace` a `.globalCard` — el cambio aplica globalmente a todos los componentes que usen esa clase sin tocar el JSX
+- Renderiza `<Counter initialValue={5} step={3} />` en `App.tsx` y haz clic en "Incrementar" — el contador pasa de 5 a 8, confirmando que `step` se aplica correctamente
+- Añade una prop `max?: number` al componente y deshabilita el botón "Incrementar" cuando `count >= max` — los tests existentes siguen pasando; añade un nuevo test que verifique que el botón está deshabilitado al llegar al máximo
+- Cambia el texto del botón de "Incrementar" a "Sumar" en el componente — el test que usa `getByRole('button', { name: 'Incrementar' })` falla inmediatamente, lo que demuestra por qué RTL busca por contenido visible
+- Cambia `data-testid="count-display"` a `role="status"` en el `<p>` — actualiza los tests para usar `getByRole('status')` en lugar de `getByTestId('count-display')`
+- Pasa `onCountChange={vi.fn()}` al componente y haz clic varias veces en los botones — abre la consola y observa que la función mock se llama con cada nuevo valor
+- Añade un límite mínimo: impide que el contador baje de `0` modificando `decrement` — escribe un test que verifique que el contador no cambia al hacer clic en "Decrementar" cuando ya está en 0
 
-> **Cuándo usarlo**: estilos base, reset CSS, tipografía global, variables de diseño.
-> Para componentes individuales, CSS Modules es más seguro.
-
----
-
-## 2 · Inline styles
-
-Los estilos van como objetos JavaScript en la prop `style`.
-TypeScript valida el objeto contra `React.CSSProperties` — cualquier propiedad
-mal escrita o con valor incorrecto da error en el editor.
-
-### `src/components/InlineStyleDemo.tsx`
+### `src/components/SearchInput.tsx`
 
 ```tsx
-// src/components/InlineStyleDemo.tsx
+// src/components/SearchInput.tsx
 
-import type { CSSProperties } from 'react'
+import { useState } from 'react'
 
-export default function InlineStyleDemo() {
-  // CSSProperties tipa el objeto — TypeScript detecta errores al escribir
-  const card: CSSProperties = {
-    border:       '1px solid var(--border)',
-    background:   'var(--card)',
-    borderRadius: 10,
-    padding:      16,
-  }
-
-  const title: CSSProperties = {
-    margin:     '0 0 8px 0',
-    color:      'var(--accent)',
-    fontWeight: 800,
-  }
-
-  return (
-    <div style={card}>
-      <h3 style={title}>Inline styles</h3>
-      <p style={{ margin: 0, color: 'var(--muted)' }}>
-        Estilos como objetos JS dentro del componente. Útil para valores dinámicos
-        pero sin soporte de pseudo-clases (<code>:hover</code>) ni media queries.
-      </p>
-    </div>
-  )
-}
-```
-
-### Prueba esto
-
-- Añade `boxShadow: '0 2px 8px rgba(0,0,0,0.1)'` al objeto `card` — guarda y observa la sombra aplicada de inmediato sin tocar ningún archivo CSS
-- Escribe `backround: 'red'` (con typo) en el objeto `card` — TypeScript muestra un error en el editor porque `backround` no es una propiedad válida de `CSSProperties`
-- Añade `:hover` directamente dentro del objeto de estilos como `':hover': { background: 'blue' }` — observa que no tiene efecto; los inline styles no soportan pseudo-clases
-- Cambia `fontWeight: 800` a `fontWeight: 'extrabold'` — TypeScript reporta error porque el valor esperado es un número o una de las cadenas válidas como `'bold'`
-- Convierte el objeto `title` en un estado con `useState` e incluye un botón que lo modifique en tiempo real — observa cómo el re-render aplica los nuevos estilos instantáneamente
-
-> **Limitación**: `style` no soporta `:hover`, `:focus`, `@media` ni animaciones CSS.
-> Para esos casos usa CSS Modules o styled-components.
-
----
-
-## 3 · CSS Modules
-
-Vite soporta CSS Modules sin configuración extra — cualquier archivo que termine
-en `.module.css` activa el scope local automáticamente. Cada clase recibe un
-nombre único generado en build time: `.btn` puede convertirse en `.btn_a3f9k`.
-
-### `src/styles/card.module.css`
-
-```css
-/* src/styles/card.module.css */
-
-.card {
-  border:        1px solid var(--border);
-  background:    var(--card);
-  border-radius: 10px;
-  padding:       16px;
+interface SearchInputProps {
+  onSearch:     (query: string) => void
+  placeholder?: string
+  minLength?:   number
 }
 
-.title {
-  margin:      0 0 8px 0;
-  color:       var(--accent);
-  font-weight: 800;
-}
-
-.btn {
-  padding:       8px 16px;
-  background:    var(--accent);
-  color:         white;
-  border:        none;
-  border-radius: 8px;
-  cursor:        pointer;
-  font-weight:   600;
-}
-
-.btn:hover {
-  filter: brightness(1.1);   /* :hover sí funciona en CSS Modules */
-}
-```
-
-### `src/components/CssModuleDemo.tsx`
-
-```tsx
-// src/components/CssModuleDemo.tsx
-
-import styles from '../styles/card.module.css'
-
-export default function CssModuleDemo() {
-  return (
-    <div className={styles.card}>
-      <h3 className={styles.title}>CSS Modules</h3>
-      <p style={{ margin: '0 0 12px', color: 'var(--muted)' }}>
-        Cada clase recibe un nombre único generado en build time.
-        Elimina colisiones sin necesitar BEM ni prefijos manuales.
-      </p>
-      <button className={styles.btn}>Botón con módulo</button>
-    </div>
-  )
-}
-```
-
-### Prueba esto
-
-- Pasa el cursor sobre el botón — observa el efecto `brightness(1.1)` del selector `.btn:hover` que funciona en CSS Modules pero no en inline styles
-- Escribe `styles.boton` en lugar de `styles.btn` — TypeScript muestra un error inmediato porque la clase `boton` no existe en el módulo
-- Abre DevTools y examina el atributo `class` del botón — verás un nombre generado como `_btn_a3f9k` en lugar del `.btn` original, confirmando el scope local
-- Añade una clase `.highlight { background: yellow }` en `card.module.css` y úsala con `className={styles.highlight}` — funciona sin riesgo de colisión con otras clases `.highlight` del proyecto
-- Añade `@media (max-width: 480px) { .card { padding: 8px } }` en el módulo CSS — reduce la ventana del navegador y observa que el padding cambia solo en pantallas pequeñas
-
-> `styles` es un objeto TypeScript — si escribes `styles.btnTypo` y la clase
-> no existe, TypeScript lo detecta como error.
-
----
-
-## 4 · styled-components v6
-
-CSS-in-JS: escribes CSS dentro de TypeScript, vinculado directamente al componente.
-El scope es automático, soporta `:hover`, media queries y recibe props tipadas.
-
-**Novedad de v6**: las props que controlan estilos deben usar el prefijo `$`
-(props transient) para evitar que pasen al DOM y generen warnings:
-
-```tsx
-// ❌ v5 — la prop variant llega al DOM como atributo HTML
-const Btn = styled.button<{ variant: 'primary' | 'outline' }>``
-
-// ✅ v6 — prefijo $ indica que es solo para estilos, no llega al DOM
-const Btn = styled.button<{ $variant?: 'primary' | 'outline' }>``
-```
-
-### `src/components/StyledComponentsDemo.tsx`
-
-```tsx
-// src/components/StyledComponentsDemo.tsx
-
-import styled from 'styled-components'
-
-// Props transient con prefijo $ — no pasan al DOM en v6
-interface BtnProps {
-  $variant?: 'primary' | 'outline'
-}
-
-const Card = styled.div`
-  border:        1px solid var(--border);
-  background:    var(--card);
-  border-radius: 10px;
-  padding:       16px;
-`
-
-const Title = styled.h3`
-  margin:      0 0 8px 0;
-  color:       var(--accent);
-  font-weight: 800;
-`
-
-const Btn = styled.button<BtnProps>`
-  padding:       8px 16px;
-  border-radius: 8px;
-  cursor:        pointer;
-  font-weight:   600;
-  border:        1px solid var(--accent);
-  background:    ${p => p.$variant === 'outline' ? 'transparent' : 'var(--accent)'};
-  color:         ${p => p.$variant === 'outline' ? 'var(--accent)' : 'white'};
-  transition:    filter 0.15s;
-
-  &:hover {
-    filter: brightness(1.1);
-  }
-`
-
-export default function StyledComponentsDemo() {
-  return (
-    <Card>
-      <Title>Styled-components v6</Title>
-      <p style={{ margin: '0 0 12px', color: 'var(--muted)' }}>
-        CSS-in-JS con scope automático. Props transient con prefijo <code>$</code>
-        en v6 para no contaminar el DOM.
-      </p>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <Btn>Primary</Btn>
-        <Btn $variant="outline">Outline</Btn>
-      </div>
-    </Card>
-  )
-}
-```
-
-### Prueba esto
-
-- Cambia `$variant="outline"` a `$variant="primary"` — ambos botones renderizan con fondo de color; confirma que la lógica de prop controla el estilo
-- Elimina el prefijo `$` de la interfaz y del uso: `variant` en lugar de `$variant` — abre DevTools y observa el warning de React sobre un atributo desconocido en el DOM
-- Añade una tercera variante `$variant?: 'primary' | 'outline' | 'danger'` y agrega `background: ${p => p.$variant === 'danger' ? '#dc2626' : ...}` — el botón cambia de color según la prop
-- Añade `&:active { transform: scale(0.97) }` dentro del template literal de `Btn` — haz clic en el botón y observa el efecto de escala en la interacción
-- Añade `font-size: 18px` directamente en el template literal de `Card` — el cambio aplica solo a ese componente sin afectar otras tarjetas del proyecto
-
----
-
-## 5 · Hooks para estilos dinámicos en tiempo real
-
-Los hooks permiten controlar estilos como si fueran estado — cambian
-la UI sin necesidad de clases adicionales ni lógica duplicada.
-
-### `src/hooks/useStyles.ts`
-
-Hook que expone funciones para cambiar color, tamaño y peso tipográfico
-de cualquier elemento desde controles de formulario:
-
-```ts
-// src/hooks/useStyles.ts
-
-import { useState, useCallback } from 'react'
-import type { CSSProperties } from 'react'
-
-interface UseStylesReturn {
-  style:    CSSProperties
-  setColor: (color: string) => void
-  setSize:  (size: number) => void
-  setBold:  (bold: boolean) => void
-  reset:    () => void
-}
-
-const DEFAULT: CSSProperties = {
-  color:      '#111827',
-  fontSize:   16,
-  fontWeight: 400,
-}
-
-export function useStyles(
-  initial: CSSProperties = DEFAULT
-): UseStylesReturn {
-  const [style, setStyle] = useState<CSSProperties>(initial)
-
-  const setColor = useCallback((color: string) => {
-    setStyle(prev => ({ ...prev, color }))
-  }, [])
-
-  const setSize = useCallback((size: number) => {
-    setStyle(prev => ({ ...prev, fontSize: size }))
-  }, [])
-
-  const setBold = useCallback((bold: boolean) => {
-    setStyle(prev => ({ ...prev, fontWeight: bold ? 700 : 400 }))
-  }, [])
-
-  const reset = useCallback(() => setStyle(initial), [initial])
-
-  return { style, setColor, setSize, setBold, reset }
-}
-```
-
-### `src/components/LiveStyleEditor.tsx`
-
-```tsx
-// src/components/LiveStyleEditor.tsx
-
-import { useStyles } from '../hooks/useStyles'
-
-export default function LiveStyleEditor() {
-  const { style, setColor, setSize, setBold, reset } = useStyles({
-    color:      '#111827',
-    fontSize:   16,
-    fontWeight: 400,
-  })
-
-  return (
-    <div style={{
-      border:       '1px solid var(--border)',
-      background:   'var(--card)',
-      borderRadius: 10,
-      padding:      16,
-    }}>
-      <h3 style={{ margin: '0 0 12px', color: 'var(--accent)', fontWeight: 800 }}>
-        Hook useStyles — editor en tiempo real
-      </h3>
-
-      {/* Controles */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, color: 'var(--muted)' }}>
-          Color
-          <input
-            type="color"
-            defaultValue="#111827"
-            onChange={e => setColor(e.target.value)}
-            style={{ width: 48, height: 32, border: 'none', cursor: 'pointer' }}
-          />
-        </label>
-
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, color: 'var(--muted)' }}>
-          Tamaño
-          <input
-            type="range"
-            min={12}
-            max={36}
-            defaultValue={16}
-            onChange={e => setSize(Number(e.target.value))}
-          />
-        </label>
-
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--muted)', cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            onChange={e => setBold(e.target.checked)}
-          />
-          Negrita
-        </label>
-
-        <button
-          onClick={reset}
-          style={{
-            padding:      '4px 12px',
-            border:       '1px solid var(--border)',
-            borderRadius: 6,
-            background:   'transparent',
-            color:        'var(--muted)',
-            cursor:       'pointer',
-            fontSize:     13,
-            alignSelf:    'flex-end',
-          }}
-        >
-          Reset
-        </button>
-      </div>
-
-      {/* Preview en tiempo real */}
-      <div style={{
-        padding:      12,
-        border:       '1px dashed var(--border)',
-        borderRadius: 8,
-        background:   'var(--bg)',
-      }}>
-        <p style={{ margin: 0, ...style }}>
-          Este texto cambia de estilo en tiempo real usando el hook useStyles.
-        </p>
-      </div>
-    </div>
-  )
-}
-```
-
-### Prueba esto
-
-- Mueve el slider de tamaño hasta el máximo — observa el texto crecer a 36px en tiempo real sin recargar la página
-- Activa "Negrita" y luego haz clic en "Reset" — el estilo vuelve exactamente al estado inicial definido en `DEFAULT`
-- Cambia el color con el picker y luego activa "Negrita" — el color se mantiene porque `setBold` usa el operador spread `{ ...prev, fontWeight }` en lugar de reemplazar el estado completo
-- Añade una función `setItalic` al hook siguiendo el mismo patrón que `setBold` — agrega un checkbox en `LiveStyleEditor` para activar/desactivar la cursiva
-- Modifica `DEFAULT` para que `fontSize` sea `24` en lugar de `16` — al montar el componente el texto aparece con 24px; haz clic en "Reset" y confirma que vuelve a 24px
-
----
-
-### `src/hooks/useHover.ts`
-
-Encapsula los event handlers `onMouseEnter`/`onMouseLeave` y la lógica
-de mezclar estilos base con estilos de hover:
-
-```ts
-// src/hooks/useHover.ts
-
-import { useState, useCallback } from 'react'
-import type { CSSProperties } from 'react'
-
-interface UseHoverReturn {
-  hoverProps: {
-    onMouseEnter: () => void
-    onMouseLeave: () => void
-  }
-  style: CSSProperties
-}
-
-export function useHover(
-  baseStyle:  CSSProperties,
-  hoverStyle: CSSProperties
-): UseHoverReturn {
-  const [hovered, setHovered] = useState(false)
-
-  const onMouseEnter = useCallback(() => setHovered(true),  [])
-  const onMouseLeave = useCallback(() => setHovered(false), [])
-
-  return {
-    hoverProps: { onMouseEnter, onMouseLeave },
-    style:      hovered ? { ...baseStyle, ...hoverStyle } : baseStyle,
-  }
-}
-```
-
-### `src/components/HoverDemo.tsx`
-
-```tsx
-// src/components/HoverDemo.tsx
-
-import { useHover } from '../hooks/useHover'
-
-export default function HoverDemo() {
-  const btn1 = useHover(
-    {
-      padding: '10px 20px', background: '#0070f3', color: 'white',
-      border: 'none', borderRadius: 8, cursor: 'pointer',
-      fontWeight: 600, transition: 'all 0.2s',
-    },
-    {
-      background: '#2563eb',
-      transform:  'translateY(-2px)',
-      boxShadow:  '0 4px 12px rgba(0,112,243,0.35)',
+export default function SearchInput({
+  onSearch,
+  placeholder = 'Buscar...',
+  minLength   = 2,
+}: SearchInputProps) {
+  const [query, setQuery] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (query.trim().length < minLength) {
+      setError(`Mínimo ${minLength} caracteres`)
+      return
     }
-  )
-
-  const btn2 = useHover(
-    {
-      padding: '10px 20px', background: 'transparent', color: 'var(--accent)',
-      border: '1px solid var(--accent)', borderRadius: 8, cursor: 'pointer',
-      fontWeight: 600, transition: 'all 0.2s',
-    },
-    { background: 'var(--accent)', color: 'white' }
-  )
-
-  const card = useHover(
-    {
-      border: '1px solid var(--border)', background: 'var(--card)',
-      borderRadius: 10, padding: 16, transition: 'all 0.2s', cursor: 'default',
-    },
-    {
-      borderColor: 'var(--accent)',
-      boxShadow:   '0 4px 16px rgba(0,0,0,0.08)',
-    }
-  )
+    setError(null)
+    onSearch(query.trim())
+  }
 
   return (
-    <div {...card.hoverProps} style={card.style}>
-      <h3 style={{ margin: '0 0 12px', color: 'var(--accent)', fontWeight: 800 }}>
-        Hook useHover — estilos al pasar el cursor
-      </h3>
-      <p style={{ margin: '0 0 14px', color: 'var(--muted)', fontSize: 14 }}>
-        Pasa el cursor sobre la tarjeta y sobre los botones para ver los efectos.
-        El hook devuelve <code>hoverProps</code> y el <code>style</code> mezclado.
-      </p>
-      <div style={{ display: 'flex', gap: 10 }}>
-        <button {...btn1.hoverProps} style={btn1.style}>Hover elevación</button>
-        <button {...btn2.hoverProps} style={btn2.style}>Hover relleno</button>
-      </div>
-    </div>
+    <form onSubmit={handleSubmit} role="search">
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder={placeholder}
+        aria-label="Campo de búsqueda"
+      />
+      <button type="submit">Buscar</button>
+      {error && <p role="alert">{error}</p>}
+    </form>
   )
 }
 ```
 
 ### Prueba esto
 
-- Pasa el cursor sobre el botón "Hover elevación" — observa la sombra y el `translateY(-2px)` que lo eleva visualmente; aleja el cursor y vuelve al estado base
-- Pasa el cursor sobre la tarjeta — el borde cambia a `var(--accent)` y aparece la sombra; el hook `useHover` en `card` aplica el mismo patrón que en los botones
-- Cambia `transform: 'translateY(-2px)'` a `transform: 'translateY(-6px)'` en `btn1` — el efecto de elevación es más pronunciado al hacer hover
-- Añade `opacity: 0.8` al `hoverStyle` de `btn2` — el botón se vuelve ligeramente transparente además de cambiar de color al pasar el cursor
-- Cambia `transition: 'all 0.2s'` a `transition: 'all 1s'` en el `baseStyle` de `btn1` — el efecto de hover aplica en cámara lenta durante 1 segundo
+- Renderiza `<SearchInput onSearch={(q) => console.log(q)} minLength={3} />` y escribe "ab" antes de hacer clic en "Buscar" — aparece el mensaje "Mínimo 3 caracteres" en el DOM
+- Escribe una búsqueda válida y haz clic en "Buscar" — el mensaje de error desaparece porque `setError(null)` se ejecuta antes de llamar a `onSearch`
+- Elimina el atributo `role="search"` del `<form>` — el test que usa `getByRole('textbox', { name: 'Campo de búsqueda' })` sigue pasando, pero ya no se puede encontrar el formulario por su rol semántico
+- Cambia `role="alert"` del `<p>` de error a `className="error"` — el test que usa `getByRole('alert')` falla; demuestra que los atributos de accesibilidad también sirven como selectores de test robustos
+- Añade `aria-label` dinámico al botón de búsqueda: `aria-label={query ? 'Buscar "${query}"' : 'Buscar'}` — los tests que buscan el botón por nombre deben actualizar el selector
+- Prueba enviar la búsqueda con la tecla Enter escribiendo en el campo y presionando Enter con `await user.keyboard('{Enter}')` — el formulario se envía igual que con el botón porque es un `<form>` nativo
 
----
-
-## 6 · Theming con Context + CSS variables
-
-El patrón más robusto para tema claro/oscuro: las CSS variables se definen
-en un archivo `.css` con dos bloques (`:root` y `[data-theme="dark"]`),
-y un Context de React gestiona qué bloque está activo.
-
-### `src/theme/theme.css`
-
-```css
-/* src/theme/theme.css */
-
-:root {
-  --bg:     #ffffff;
-  --card:   #f9fafb;
-  --border: #e5e7eb;
-  --text:   #111827;
-  --accent: #0070f3;
-  --muted:  #6b7280;
-}
-
-[data-theme="dark"] {
-  --bg:     #0f172a;
-  --card:   #1e293b;
-  --border: #334155;
-  --text:   #f1f5f9;
-  --accent: #60a5fa;
-  --muted:  #94a3b8;
-}
-```
-
-### `src/theme/ThemeContext.tsx`
+### `src/components/UserCard.tsx`
 
 ```tsx
-// src/theme/ThemeContext.tsx
-// React 19 — <ThemeContext value={...}> sin .Provider
+// src/components/UserCard.tsx
 
-import { createContext, useContext, useState } from 'react'
-
-type Theme = 'light' | 'dark'
-
-interface ThemeContextValue {
-  theme:       Theme
-  toggleTheme: () => void
+interface UserCardProps {
+  name:       string
+  email:      string
+  isVerified: boolean
+  onEdit:     () => void
+  onDelete:   () => void
 }
 
-const ThemeContext = createContext<ThemeContextValue | null>(null)
-
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>('light')
-
-  function toggleTheme() {
-    setTheme(t => t === 'light' ? 'dark' : 'light')
-  }
-
+export default function UserCard({
+  name, email, isVerified, onEdit, onDelete,
+}: UserCardProps) {
   return (
-    <ThemeContext value={{ theme, toggleTheme }}>
-      <div
-        data-theme={theme}
-        style={{
-          background: 'var(--bg)',
-          color:      'var(--text)',
-          minHeight:  '100vh',
-          transition: 'background 0.25s, color 0.25s',
-        }}
-      >
-        {children}
-      </div>
-    </ThemeContext>
-  )
-}
-
-export function useTheme(): ThemeContextValue {
-  const ctx = useContext(ThemeContext)
-  if (!ctx) throw new Error('useTheme debe usarse dentro de ThemeProvider')
-  return ctx
-}
-```
-
-### `src/components/ThemePanel.tsx`
-
-```tsx
-// src/components/ThemePanel.tsx
-
-import { useTheme } from '../theme/ThemeContext'
-
-export default function ThemePanel() {
-  const { theme, toggleTheme } = useTheme()
-
-  return (
-    <div style={{
-      border:       '1px solid var(--border)',
-      background:   'var(--card)',
-      borderRadius: 10,
-      padding:      16,
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <h3 style={{ margin: 0, color: 'var(--accent)', fontWeight: 800 }}>
-          Theming con Context + CSS variables
-        </h3>
-        <button
-          onClick={toggleTheme}
-          style={{
-            padding:      '6px 14px',
-            border:       '1px solid var(--border)',
-            borderRadius: 8,
-            background:   'var(--bg)',
-            color:        'var(--text)',
-            cursor:       'pointer',
-            fontWeight:   600,
-            fontSize:     13,
-          }}
-        >
-          {theme === 'light' ? '🌙 Modo oscuro' : '☀️ Modo claro'}
-        </button>
-      </div>
-
-      <p style={{ margin: '0 0 12px', color: 'var(--muted)', fontSize: 14 }}>
-        El atributo <code>data-theme</code> en el contenedor raíz activa el bloque
-        CSS correspondiente. Todos los componentes heredan las variables sin
-        necesidad de props ni contexto adicional.
-      </p>
-
-      {/* Paleta visual de las variables activas */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {['--bg', '--card', '--border', '--text', '--accent', '--muted'].map(v => (
-          <div
-            key={v}
-            style={{
-              padding:      '4px 10px',
-              background:   `var(${v})`,
-              border:       '1px solid var(--border)',
-              borderRadius: 6,
-              fontSize:     12,
-              color:        v === '--bg' || v === '--card' ? 'var(--text)' : 'var(--bg)',
-            }}
-          >
-            {v}
-          </div>
-        ))}
-      </div>
-    </div>
+    <article aria-label={`Tarjeta de ${name}`}>
+      <h3>{name}</h3>
+      <p>{email}</p>
+      {isVerified
+        ? <span data-testid="verified-badge">✓ Verificado</span>
+        : <span data-testid="unverified-badge">No verificado</span>
+      }
+      <button onClick={onEdit}   aria-label={`Editar ${name}`}>Editar</button>
+      <button onClick={onDelete} aria-label={`Eliminar ${name}`}>Eliminar</button>
+    </article>
   )
 }
 ```
 
----
+### Prueba esto
 
-## `src/App.tsx`
+- Renderiza `<UserCard name="Ana García" email="ana@ejemplo.com" isVerified={true} onEdit={() => {}} onDelete={() => {}} />` — observa el badge "✓ Verificado" y los dos botones con sus `aria-label` dinámicos
+- Cambia `isVerified` a `false` — el badge cambia a "No verificado" y el test de `verified-badge` fallaría; el de `unverified-badge` pasaría
+- Añade una prop `role?: 'admin' | 'user'` y muestra una etiqueta adicional cuando `role === 'admin'` — escribe un test que verifique que la etiqueta aparece solo para administradores
+- Haz clic en el botón "Editar" de la tarjeta renderizada en `App.tsx` y abre la consola — la función `onEdit` que pasaste se ejecuta, lo que confirma el flujo de callbacks
+- Cambia el `aria-label` del botón de editar de `Editar ${name}` a simplemente `"Editar"` — el test `getByRole('button', { name: 'Editar Ana García' })` falla; esto muestra que los `aria-label` dinámicos hacen los tests más específicos y resistentes a colisiones
+- Añade `data-testid="user-card"` al `<article>` — escribe un test que verifique que el elemento existe en el DOM y que tiene el `aria-label` correcto con `toHaveAttribute`
+
+## Navegador de pasos — `App.tsx`
 
 ```tsx
 // src/App.tsx
 
-import { ThemeProvider }        from './theme/ThemeContext'
-import CssGlobalDemo            from './components/CssGlobalDemo'
-import InlineStyleDemo          from './components/InlineStyleDemo'
-import CssModuleDemo            from './components/CssModuleDemo'
-import StyledComponentsDemo     from './components/StyledComponentsDemo'
-import LiveStyleEditor          from './components/LiveStyleEditor'
-import HoverDemo                from './components/HoverDemo'
-import ThemePanel               from './components/ThemePanel'
-import './theme/theme.css'
+import StatusBadge from './components/StatusBadge'
+import Counter     from './components/Counter'
+import SearchInput from './components/SearchInput'
+import UserCard    from './components/UserCard'
+
+// ┌──────────────────────────────────────────────────────────────────────┐
+// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
+// │  1  StatusBadge  — badge de estado con data-testid                  │
+// │  2  Counter      — contador con step y callback onCountChange       │
+// │  3  SearchInput  — búsqueda con validación mínima y role="alert"    │
+// │  4  UserCard     — tarjeta con aria-label y callbacks               │
+// └──────────────────────────────────────────────────────────────────────┘
+const PASO = 1
 
 export default function App() {
-  return (
-    <ThemeProvider>
-      <main style={{
-        maxWidth:      640,
-        margin:        '0 auto',
-        padding:       '32px 16px',
-        display:       'flex',
-        flexDirection: 'column',
-        gap:           16,
-      }}>
-        <h1 style={{ margin: 0, color: 'var(--accent)', fontSize: 22, fontWeight: 800 }}>
-          Estilos en React
-        </h1>
+  const content =
+    PASO === 1 ? (
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <StatusBadge status="active" />
+        <StatusBadge status="inactive" />
+        <StatusBadge status="pending" />
+      </div>
+    ) :
+    PASO === 2 ? <Counter initialValue={0} step={1} onCountChange={(n) => console.log('count:', n)} /> :
+    PASO === 3 ? <SearchInput onSearch={(q) => console.log('search:', q)} minLength={2} /> :
+    PASO === 4 ? (
+      <UserCard
+        name="Ana García"
+        email="ana@ejemplo.com"
+        isVerified={true}
+        onEdit={() => console.log('editar')}
+        onDelete={() => console.log('eliminar')}
+      />
+    ) :
+    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
 
-        <CssGlobalDemo />
-        <InlineStyleDemo />
-        <CssModuleDemo />
-        <StyledComponentsDemo />
-        <LiveStyleEditor />
-        <HoverDemo />
-        <ThemePanel />
-      </main>
-    </ThemeProvider>
+  return (
+    <main style={{ maxWidth: 600, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
+      {content}
+    </main>
   )
 }
 ```
 
----
+### Prueba esto
 
-## Cuándo usar cada enfoque
-
-| Situación | Enfoque recomendado |
-|---|---|
-| Estilos globales, reset, variables | CSS global |
-| Estilo calculado en runtime con JS | Inline styles |
-| Componentes con estilos propios y `:hover` | CSS Modules |
-| Componentes con muchas variantes por props | styled-components |
-| Tema claro/oscuro global | Context + CSS variables |
-| Cambiar estilos desde controles de UI | Hook `useStyles` |
+- Cambia `PASO` a `2` y guarda — el contador aparece; haz clic en "Incrementar" y observa en la consola que `onCountChange` se llama con cada nuevo valor
+- Cambia `PASO` a `3`, escribe "a" en el input y haz clic en "Buscar" — el mensaje "Mínimo 2 caracteres" aparece porque solo escribiste un carácter
+- Cambia `PASO` a `4` y haz clic en "Editar" — aparece `editar` en la consola del navegador; los botones usan `aria-label` dinámico que los tests buscan por rol
+- Pon `PASO = 5` — aparece el mensaje de error en rojo; es la rama `else` del ternario encadenado
+- Vuelve a `PASO = 1` y observa los tres badges con sus estados; cambia `status="active"` por `status="pending"` en el primero — el badge adopta el color amarillo del mapa `config`
 
 ---
 
-## Resumen de la página 3B
+## Los tests — todos verificados y pasando (20/20)
 
-- CSS global: rápido y simple, riesgo de colisión de nombres entre componentes.
-- Inline styles: totalmente dinámico pero sin `:hover`, `:focus` ni `@media`.
-- CSS Modules: nombres únicos automáticos, soporta `:hover` — el equilibrio para la mayoría de los casos.
-- styled-components v6: CSS-in-JS con scope, props tipadas y soporte completo de CSS. No instalar `@types/styled-components` — los tipos vienen incluidos. Props de estilo usan prefijo `$`.
-- CSS variables en `:root` y `[data-theme="dark"]` — el patrón más eficiente para theming. Los componentes leen las variables sin saber si el tema es claro u oscuro.
-- `useStyles` y `useHover` — encapsulan la lógica de cambio de estilos igual que cualquier otro hook de estado.
+### `src/__tests__/StatusBadge.test.tsx`
+
+```tsx
+// src/__tests__/StatusBadge.test.tsx
+
+import { render, screen } from '@testing-library/react'
+import StatusBadge         from '../components/StatusBadge'
+
+describe('StatusBadge', () => {
+  it('muestra el texto por defecto según el status', () => {
+    render(<StatusBadge status="active" />)
+    expect(screen.getByTestId('status-badge')).toHaveTextContent('Activo')
+  })
+
+  it('muestra el label personalizado cuando se proporciona', () => {
+    render(<StatusBadge status="active" label="En línea" />)
+    expect(screen.getByTestId('status-badge')).toHaveTextContent('En línea')
+  })
+
+  it('renderiza correctamente para cada status', () => {
+    const casos: Array<{ status: 'active' | 'inactive' | 'pending'; texto: string }> = [
+      { status: 'active',   texto: 'Activo'    },
+      { status: 'inactive', texto: 'Inactivo'  },
+      { status: 'pending',  texto: 'Pendiente' },
+    ]
+
+    for (const { status, texto } of casos) {
+      const { unmount } = render(<StatusBadge status={status} />)
+      expect(screen.getByTestId('status-badge')).toHaveTextContent(texto)
+      unmount()  // limpia el DOM entre iteraciones
+    }
+  })
+})
+```
+
+### Prueba esto
+
+- Ejecuta `npm test` con estos tests escritos — los tres tests pasan y Vitest muestra el árbol "StatusBadge > muestra el texto por defecto..." en verde
+- Cambia `toHaveTextContent('Activo')` a `toHaveTextContent('Activos')` — el test falla con un mensaje claro: "Expected element to have text content: Activos, Received: Activo"
+- Añade un cuarto test para el label personalizado con `status="pending"` y `label="En revisión"` — ejecuta los tests y observa que el nuevo test aparece en el árbol con el nombre que le diste en `it(...)`
+- Elimina `unmount()` del bucle del tercer test — el test lanza un error porque hay múltiples elementos con `data-testid="status-badge"` y `getByTestId` solo espera encontrar uno
+- Cambia `getByTestId('status-badge')` por `getByText('Activo')` en el primer test — el test sigue pasando; observa que `getByText` es menos específico pero igualmente válido para este caso
+- Añade `it.skip('test pendiente', () => { ... })` para un cuarto status `'error'` aún no implementado — Vitest muestra el test como "skipped" en amarillo sin fallar la suite
+
+### `src/__tests__/Counter.test.tsx`
+
+```tsx
+// src/__tests__/Counter.test.tsx
+
+import { render, screen } from '@testing-library/react'
+import userEvent            from '@testing-library/user-event'
+import Counter              from '../components/Counter'
+
+describe('Counter', () => {
+  it('muestra el valor inicial por defecto (0)', () => {
+    render(<Counter />)
+    expect(screen.getByTestId('count-display')).toHaveTextContent('Cuenta: 0')
+  })
+
+  it('respeta el valor inicial personalizado', () => {
+    render(<Counter initialValue={10} />)
+    expect(screen.getByTestId('count-display')).toHaveTextContent('Cuenta: 10')
+  })
+
+  it('incrementa al hacer clic en Incrementar', async () => {
+    const user = userEvent.setup()
+    render(<Counter />)
+    await user.click(screen.getByRole('button', { name: 'Incrementar' }))
+    expect(screen.getByTestId('count-display')).toHaveTextContent('Cuenta: 1')
+  })
+
+  it('decrementa al hacer clic en Decrementar', async () => {
+    const user = userEvent.setup()
+    render(<Counter initialValue={5} />)
+    await user.click(screen.getByRole('button', { name: 'Decrementar' }))
+    expect(screen.getByTestId('count-display')).toHaveTextContent('Cuenta: 4')
+  })
+
+  it('respeta el step personalizado', async () => {
+    const user = userEvent.setup()
+    render(<Counter step={5} />)
+    await user.click(screen.getByRole('button', { name: 'Incrementar' }))
+    expect(screen.getByTestId('count-display')).toHaveTextContent('Cuenta: 5')
+  })
+
+  it('resetea al valor inicial al hacer clic en Reset', async () => {
+    const user = userEvent.setup()
+    render(<Counter initialValue={3} />)
+    await user.click(screen.getByRole('button', { name: 'Incrementar' }))
+    await user.click(screen.getByRole('button', { name: 'Incrementar' }))
+    await user.click(screen.getByRole('button', { name: 'Reset' }))
+    expect(screen.getByTestId('count-display')).toHaveTextContent('Cuenta: 3')
+  })
+
+  it('llama a onCountChange con el nuevo valor', async () => {
+    const user     = userEvent.setup()
+    const onChange = vi.fn()
+    render(<Counter onCountChange={onChange} />)
+    await user.click(screen.getByRole('button', { name: 'Incrementar' }))
+    expect(onChange).toHaveBeenCalledWith(1)
+    expect(onChange).toHaveBeenCalledTimes(1)
+  })
+})
+```
+
+### Prueba esto
+
+- Ejecuta `npm test` y observa que los 7 tests de `Counter` pasan — el árbol muestra cada descripción del `it(...)` como una fila verde independiente
+- Cambia `toHaveTextContent('Cuenta: 1')` a `toHaveTextContent('Cuenta: 2')` en el test de incremento — el test falla con el diff exacto: "Expected: Cuenta: 2 / Received: Cuenta: 1"
+- Elimina el `await` antes de `user.click(...)` en el test de incremento — el test puede pasar o fallar de forma no determinista (falso positivo); añade el `await` de vuelta para entender por qué es obligatorio
+- Añade un test que haga clic en "Incrementar" tres veces seguidas y verifique que el contador muestra "Cuenta: 3" — usa tres `await user.click(...)` consecutivos en el mismo test
+- Cambia `vi.fn()` por `vi.fn().mockReturnValue(undefined)` en el test del callback — el comportamiento es idéntico; observa que `mockReturnValue` es útil cuando el callback necesita retornar un valor específico
+- Añade `expect(onChange).not.toHaveBeenCalledWith(0)` al test del callback después de incrementar — el test pasa porque el callback se llamó con `1`, no con `0`
+- Escribe un test que haga clic en "Decrementar" desde `initialValue={0}` y verifique que el contador muestra "Cuenta: -1" — ejecuta el test para confirmar que el componente actual permite valores negativos
+
+### `src/__tests__/SearchInput.test.tsx`
+
+```tsx
+// src/__tests__/SearchInput.test.tsx
+
+import { render, screen } from '@testing-library/react'
+import userEvent            from '@testing-library/user-event'
+import SearchInput          from '../components/SearchInput'
+
+describe('SearchInput', () => {
+  it('renderiza el input y el botón', () => {
+    render(<SearchInput onSearch={vi.fn()} />)
+    expect(screen.getByRole('textbox', { name: 'Campo de búsqueda' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Buscar' })).toBeInTheDocument()
+  })
+
+  it('muestra error si el query es menor al mínimo', async () => {
+    const user = userEvent.setup()
+    render(<SearchInput onSearch={vi.fn()} minLength={3} />)
+    await user.type(screen.getByRole('textbox'), 'ab')
+    await user.click(screen.getByRole('button', { name: 'Buscar' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Mínimo 3 caracteres')
+  })
+
+  it('llama a onSearch con el valor correcto', async () => {
+    const user     = userEvent.setup()
+    const onSearch = vi.fn()
+    render(<SearchInput onSearch={onSearch} />)
+    await user.type(screen.getByRole('textbox'), 'react')
+    await user.click(screen.getByRole('button', { name: 'Buscar' }))
+    expect(onSearch).toHaveBeenCalledWith('react')
+    expect(onSearch).toHaveBeenCalledTimes(1)
+  })
+
+  it('no muestra error si el query es válido', async () => {
+    const user = userEvent.setup()
+    render(<SearchInput onSearch={vi.fn()} />)
+    await user.type(screen.getByRole('textbox'), 'typescript')
+    await user.click(screen.getByRole('button', { name: 'Buscar' }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('usa el placeholder proporcionado', () => {
+    render(<SearchInput onSearch={vi.fn()} placeholder="Buscar productos..." />)
+    expect(screen.getByPlaceholderText('Buscar productos...')).toBeInTheDocument()
+  })
+})
+```
+
+### Prueba esto
+
+- Ejecuta `npm test` — los 5 tests de `SearchInput` pasan; observa en la salida que el test de error de validación lleva más tiempo porque `userEvent.type` simula cada pulsación de tecla
+- Cambia `minLength={3}` a `minLength={5}` en el test de error de validación pero mantén `'ab'` como entrada — el error cambia a "Mínimo 5 caracteres"; actualiza la aserción para que el test vuelva a pasar
+- En el test de `onSearch`, cambia `'react'` por `'  react  '` (con espacios) como entrada de `user.type` — observa que `onSearch` se llama con `'react'` sin espacios porque `handleSubmit` llama a `query.trim()` antes de pasar el valor
+- Añade un test que verifique que `onSearch` no se llama si el query está vacío y se hace clic en "Buscar" — usa `expect(onSearch).not.toHaveBeenCalled()` para la aserción
+- Cambia `screen.queryByRole('alert')` a `screen.getByRole('alert')` en el test de ausencia de error — el test lanza una excepción en lugar de fallar limpiamente; esto ilustra cuándo usar `queryBy*` frente a `getBy*`
+- Escribe un test que verifique que el mensaje de error desaparece al escribir una búsqueda válida después de haber recibido un error: envía un query corto, observa el error, escribe uno válido y vuelve a enviar, luego verifica con `queryByRole('alert')` que el error ya no está
+
+### `src/__tests__/UserCard.test.tsx`
+
+```tsx
+// src/__tests__/UserCard.test.tsx
+
+import { render, screen } from '@testing-library/react'
+import userEvent            from '@testing-library/user-event'
+import UserCard             from '../components/UserCard'
+
+// Props por defecto reutilizables en todos los tests
+const DEFAULT_PROPS = {
+  name:       'Ana García',
+  email:      'ana@ejemplo.com',
+  isVerified: true,
+  onEdit:     vi.fn(),
+  onDelete:   vi.fn(),
+}
+
+describe('UserCard', () => {
+  it('muestra nombre y email', () => {
+    render(<UserCard {...DEFAULT_PROPS} />)
+    expect(screen.getByRole('heading', { name: 'Ana García' })).toBeInTheDocument()
+    expect(screen.getByText('ana@ejemplo.com')).toBeInTheDocument()
+  })
+
+  it('muestra badge verificado cuando isVerified es true', () => {
+    render(<UserCard {...DEFAULT_PROPS} isVerified={true} />)
+    expect(screen.getByTestId('verified-badge')).toBeInTheDocument()
+    expect(screen.queryByTestId('unverified-badge')).not.toBeInTheDocument()
+  })
+
+  it('muestra badge no verificado cuando isVerified es false', () => {
+    render(<UserCard {...DEFAULT_PROPS} isVerified={false} />)
+    expect(screen.getByTestId('unverified-badge')).toBeInTheDocument()
+    expect(screen.queryByTestId('verified-badge')).not.toBeInTheDocument()
+  })
+
+  it('llama a onEdit al hacer clic en Editar', async () => {
+    const user   = userEvent.setup()
+    const onEdit = vi.fn()
+    render(<UserCard {...DEFAULT_PROPS} onEdit={onEdit} />)
+    await user.click(screen.getByRole('button', { name: 'Editar Ana García' }))
+    expect(onEdit).toHaveBeenCalledTimes(1)
+  })
+
+  it('llama a onDelete al hacer clic en Eliminar', async () => {
+    const user     = userEvent.setup()
+    const onDelete = vi.fn()
+    render(<UserCard {...DEFAULT_PROPS} onDelete={onDelete} />)
+    await user.click(screen.getByRole('button', { name: 'Eliminar Ana García' }))
+    expect(onDelete).toHaveBeenCalledTimes(1)
+  })
+})
+```
+
+### Prueba esto
+
+- Ejecuta `npm test` — los 5 tests de `UserCard` pasan; observa que los tests de `onEdit` y `onDelete` usan `vi.fn()` local en lugar del `DEFAULT_PROPS.onEdit` para poder verificar llamadas de forma aislada
+- Cambia `name: 'Ana García'` en `DEFAULT_PROPS` a `name: 'Carlos López'` — todos los tests fallan porque los `aria-label` dinámicos de los botones cambian a "Editar Carlos López" y "Eliminar Carlos López"
+- Haz clic dos veces en el botón "Editar" dentro del test `it('llama a onEdit...')` añadiendo otro `await user.click(...)` — cambia la aserción a `toHaveBeenCalledTimes(2)` para ver que el mock registra múltiples llamadas
+- Añade `beforeEach(() => { vi.clearAllMocks() })` al `describe` de `UserCard` — esto reinicia los contadores de los mocks entre tests para evitar que llamadas de un test contaminen las aserciones del siguiente
+- Añade un test que verifique que el artículo tiene el `aria-label` correcto: `expect(screen.getByRole('article')).toHaveAttribute('aria-label', 'Tarjeta de Ana García')` — el test pasa porque el componente usa `aria-label={Tarjeta de ${name}}`
+- Escribe un test que renderice dos `UserCard` con nombres diferentes y verifique que puedes seleccionar cada botón de forma independiente usando `getByRole('button', { name: 'Editar Ana García' })` y `getByRole('button', { name: 'Editar Carlos López' })`
 
 ---
 
-> **Siguiente página →** Página 4: `useState` en profundidad.
-> **Frameworks de estilos →** Páginas 16–19: React-Bootstrap, Tailwind CSS, Ant Design y Material UI.
+## Conceptos clave de RTL
+
+### Queries — cómo buscar elementos
+
+```tsx
+// getBy* — lanza si no existe o hay más de uno
+screen.getByRole('button', { name: 'Enviar' })
+screen.getByText('Hola mundo')
+screen.getByTestId('count-display')
+screen.getByPlaceholderText('Buscar...')
+screen.getByLabelText('Email')
+
+// queryBy* — retorna null si no existe (no lanza)
+// Útil para verificar que algo NO está en el DOM
+screen.queryByRole('alert')       // null si no hay alerta
+screen.queryByTestId('error-msg') // null si no hay error
+
+// findBy* — async, espera a que aparezca
+await screen.findByText('Cargando completo')
+await screen.findByRole('status')
+```
+
+### Prioridad de queries — de más a menos preferida
+
+```
+1. getByRole           ← accesibilidad real del elemento
+2. getByLabelText      ← inputs asociados a su label
+3. getByPlaceholderText
+4. getByText           ← contenido visible
+5. getByDisplayValue   ← valor actual de inputs/selects
+6. getByTestId         ← último recurso — añade data-testid al componente
+```
+
+> `getByRole` es la query más robusta: usa el árbol de accesibilidad
+> real del navegador. Si tu componente es accesible, los tests con
+> `getByRole` también pasan con lectores de pantalla.
+
+### `userEvent` vs `fireEvent`
+
+```tsx
+// fireEvent — simula el evento de DOM directamente (simple)
+import { fireEvent } from '@testing-library/react'
+fireEvent.click(button)
+fireEvent.change(input, { target: { value: 'texto' } })
+
+// userEvent — simula el comportamiento real del usuario (preferido)
+// Dispara todos los eventos intermedios (focus, keydown, keyup, etc.)
+const user = userEvent.setup()
+await user.click(button)
+await user.type(input, 'texto')     // dispara cada keystroke
+await user.keyboard('{Enter}')
+await user.selectOptions(select, 'opción')
+await user.clear(input)
+```
+
+> Usa `userEvent` por defecto. Es más fiel al comportamiento real.
+> `fireEvent` sirve para casos donde necesitas más control.
+
+### Matchers de `jest-dom`
+
+```tsx
+expect(element).toBeInTheDocument()
+expect(element).not.toBeInTheDocument()
+expect(element).toBeVisible()
+expect(element).toBeDisabled()
+expect(element).toBeEnabled()
+expect(element).toHaveTextContent('texto')
+expect(element).toHaveValue('valor')
+expect(element).toHaveAttribute('type', 'email')
+expect(element).toHaveClass('mi-clase')
+expect(element).toHaveFocus()
+expect(element).toBeChecked()
+```
+
+---
+
+## Testear callbacks con `vi.fn()`
+
+`vi.fn()` crea una función mock — registra cada llamada para que puedas
+verificar cuántas veces fue llamada y con qué argumentos:
+
+```tsx
+it('llama a onSearch con el término correcto', async () => {
+  const user     = userEvent.setup()
+  const onSearch = vi.fn()          // función mock
+
+  render(<SearchInput onSearch={onSearch} />)
+  await user.type(screen.getByRole('textbox'), 'react')
+  await user.click(screen.getByRole('button', { name: 'Buscar' }))
+
+  expect(onSearch).toHaveBeenCalledTimes(1)        // se llamó exactamente una vez
+  expect(onSearch).toHaveBeenCalledWith('react')   // con este argumento
+  expect(onSearch).not.toHaveBeenCalledWith('React') // no con este otro
+})
+```
+
+### Prueba esto
+
+- Copia este test a tu archivo de tests, ejecútalo con `npm test` — pasa; modifica el argumento de `toHaveBeenCalledWith` a `'React'` con mayúscula — falla con el mensaje "Expected: React / Received: react"
+- Añade `expect(onSearch).toHaveBeenCalledTimes(2)` al final del test sin hacer un segundo clic — el test falla con "Expected number of calls: 2 / Received: 1", que es el error más común con mocks
+- Reemplaza `vi.fn()` por `vi.fn().mockImplementation((q) => console.log('Buscando:', q))` — el mock ahora ejecuta código real; útil para depurar qué argumentos recibe sin cambiar el test
+- Llama a `onSearch.mockReset()` antes de la segunda parte del test si necesitas verificar llamadas desde cero — esto reinicia `toHaveBeenCalledTimes` a 0 sin necesidad de crear un nuevo mock
+- Añade `expect(onSearch).toHaveBeenLastCalledWith('react')` — esta aserción verifica solo la última llamada, útil cuando el mock se llama varias veces y solo te interesa el resultado final
+- Verifica el argumento por posición con `expect(onSearch.mock.calls[0][0]).toBe('react')` — accede directamente al registro de llamadas para casos donde los matchers estándar no son suficientes
+
+---
+
+## Errores comunes en tests RTL
+
+```tsx
+// ❌ Buscar por clase CSS — frágil, rompe si cambias el estilo
+screen.getByClass('btn-primary')
+
+// ❌ Buscar por selector CSS — frágil
+document.querySelector('.card > p')
+
+// ✅ Buscar por rol accesible — robusto
+screen.getByRole('button', { name: 'Enviar' })
+
+// ❌ Olvidar await en userEvent — el test pasa aunque falle
+user.click(button)
+expect(screen.getByText('Resultado')).toBeInTheDocument() // puede ser falso positivo
+
+// ✅ Siempre await con userEvent
+await user.click(button)
+expect(screen.getByText('Resultado')).toBeInTheDocument()
+
+// ❌ Usar getBy* cuando el elemento puede no existir
+screen.getByText('Error')   // lanza si no hay error — falso negativo
+
+// ✅ queryBy* para verificar ausencia
+expect(screen.queryByText('Error')).not.toBeInTheDocument()
+
+// ❌ Testear implementación interna
+expect(component.state.count).toBe(1)   // accede al estado directamente
+
+// ✅ Testear lo que el usuario ve
+expect(screen.getByTestId('count-display')).toHaveTextContent('Cuenta: 1')
+```
+
+---
+
+## Ejercicios propuestos
+
+1. **Testear `StatusBadge` de página 2** — añade `data-testid="status-badge"` al componente
+   `StatusBadge` que creaste en la página 2 y escribe tests para verificar
+   que cada variante (`active`, `inactive`, `pending`, `error`) muestra el texto correcto.
+
+2. **Testear `ContactForm` de página 12** — escribe tests para verificar que:
+   - El formulario muestra errores si se envía vacío.
+   - El error desaparece al escribir en el campo.
+   - El mensaje de éxito aparece tras un envío correcto (usa `findByText` para esperar async).
+
+3. **Testear `useCounter`** — instala `@testing-library/react-hooks` o usa `renderHook`
+   de RTL para testear el hook directamente sin montar un componente completo.
+
+---
+
+## Resumen de la página 13
+
+- Vitest es el test runner — compatible con la configuración de Vite, sin configuración extra.
+- RTL testea comportamiento del usuario, no implementación interna.
+- La configuración mínima: `vite.config.ts` con `test: { environment: 'jsdom', globals: true }` + `setup.ts` con `import '@testing-library/jest-dom'`.
+- `getByRole` es la query más robusta — usa el árbol de accesibilidad real.
+- `queryBy*` retorna `null` si no existe — úsalo para verificar ausencia con `.not.toBeInTheDocument()`.
+- `findBy*` es async — úsalo cuando el elemento aparece después de una operación async.
+- `userEvent.setup()` + `await user.click/type/...` simula el comportamiento real del usuario.
+- `vi.fn()` crea mocks de funciones — verifica llamadas con `toHaveBeenCalledWith` y `toHaveBeenCalledTimes`.
+- `data-testid` es el último recurso — primero intenta con `getByRole`, `getByLabelText` o `getByText`.
+
+---
+
+> **Siguiente página →** Fetching con TanStack Query (React Query):
+> caché automático, estados de carga, refetching y mutaciones tipadas.

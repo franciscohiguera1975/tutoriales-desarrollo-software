@@ -1,709 +1,867 @@
-# Curso React.js + TypeScript — Página 11
-## Módulo 5 · Arquitectura
-### Rendimiento: `React.memo`, patrones de optimización y code splitting
+# Curso React.js + TypeScript — Página 9B
+## Módulo 4 · Integración con APIs
+### `fetch`, `axios`, cliente tipado, paginación y CRUD
 
 ---
 
-## ¿Cuándo re-renderiza React?
+## ¿Qué cubre esta página?
 
-Un componente se re-renderiza cuando:
+En las páginas anteriores usaste `fetch` dentro de `useEffect` y extrajiste
+la lógica a un `useFetch` genérico. Esta página profundiza en el tema:
 
-1. **Su propio estado cambia** — `useState` o `useReducer`
-2. **Sus props cambian** — cualquier prop, por comparación de referencia
-3. **Su contexto cambia** — cualquier valor del contexto que consume
-4. **Su padre se re-renderiza** — aunque las props no hayan cambiado
+- Comparativa `fetch` vs `axios`
+- Cliente de API tipado y centralizado
+- `useFetchData` con soporte para recarga manual (`refetch`)
+- `usePagination` — hook de paginación reutilizable
+- CRUD completo con `axios` e interceptores
+- Variables de entorno con Vite
 
-El punto 4 es el más sorprendente: **por defecto, si el padre re-renderiza,
-todos los hijos re-renderizan**, aunque sus props sean idénticas.
-
-```
-App (re-renderiza porque su estado cambió)
- ├── Header     ← re-renderiza aunque no tenga props del App
- ├── Sidebar    ← re-renderiza aunque no tenga props del App
- └── MainContent ← re-renderiza aunque no tenga props del App
-      └── ProductList ← re-renderiza
-           └── ProductRow × 100 ← 100 re-renders innecesarios
-```
-
-`React.memo` corta esta cadena.
+Lo cubierto aquí aplica cuando **no usas TanStack Query** (página 14).
+Si usas TanStack Query, muchos de estos patrones los gestiona la librería.
 
 ---
 
-## `React.memo`
+## `fetch` vs `axios`
 
-`React.memo` envuelve un componente y le indica a React que **solo lo
-re-renderice si sus props cambiaron**. Usa comparación superficial por defecto:
-compara cada prop con `===`.
+`fetch` es nativo del navegador — cero dependencias. `axios` es una librería
+que simplifica varias tareas habituales.
 
-```tsx
-import { memo } from 'react'
+```ts
+// fetch — nativo, sin dependencias
+const res  = await fetch('https://api.ejemplo.com/posts')
+const data = await res.json()  // hay que parsear manualmente
 
-// Sin memo — re-renderiza siempre que el padre re-renderice
-function UserCard({ name, email }: UserCardProps) {
-  return <div>{name} — {email}</div>
-}
-
-// Con memo — solo re-renderiza si name o email cambian
-const UserCard = memo(function UserCard({ name, email }: UserCardProps) {
-  return <div>{name} — {email}</div>
-})
+// ⚠️ fetch NO lanza error en respuestas 4xx/5xx
+// Un 404 es una respuesta "exitosa" para fetch — hay que verificar res.ok
+if (!res.ok) throw new Error(`HTTP ${res.status}`)
 ```
 
-### La trampa de las funciones como props
+```ts
+// axios — hay que instalar: npm install axios
+import axios from 'axios'
 
-`React.memo` compara props con `===`. Las funciones son objetos — dos
-funciones con el mismo código son referencias distintas:
-
-```tsx
-function App() {
-  // Esta función se recrea en cada render de App
-  function handleEdit() { console.log('edit') }
-
-  // Aunque UserCard tenga memo, re-renderiza porque
-  // handleEdit es una nueva referencia en cada render
-  return <UserCard onEdit={handleEdit} />
-}
+const { data } = await axios.get('https://api.ejemplo.com/posts')
+// axios parsea JSON automáticamente
+// axios SÍ lanza error en 4xx/5xx — no hace falta verificar
 ```
 
-La solución: `useCallback` para estabilizar la referencia.
+### Comparativa directa
+
+| Característica | `fetch` | `axios` |
+|---|---|---|
+| ¿Nativo? | ✅ Sí — sin instalación | ❌ Requiere `npm install axios` |
+| Parseo de JSON | Manual (`res.json()`) | Automático (`res.data`) |
+| Errores HTTP 4xx/5xx | ❌ No lanza — verificar `res.ok` | ✅ Lanza automáticamente |
+| Interceptores | ❌ No tiene | ✅ `interceptors.request/response` |
+| Cancelación | `AbortController` | `AbortController` o `CancelToken` |
+| Timeout | Manual con `AbortController` | Opción `timeout` en la config |
+| TypeScript | Tipos básicos del DOM | Tipado genérico en `get<T>()` |
+| Tamaño | 0 KB | ~14 KB (minificado) |
+
+> **Cuándo usar cada uno**: para proyectos pequeños o cuando el bundle size importa,
+> `fetch` es suficiente. Para proyectos con autenticación, interceptores y múltiples
+> endpoints, `axios` reduce código repetido significativamente.
 
 ---
 
-## `src/components/UserCard.tsx`
+## Práctica progresiva — de simple a complejo
+
+Los ejemplos avanzan en este orden:
+
+```
+1. fetch directo en useEffect                ← lo más simple
+2. Cliente fetch centralizado y tipado       ← sin repetición
+3. useFetchData con refetch manual           ← hook reutilizable
+4. usePagination                             ← hook de UI
+5. Cliente axios con interceptores           ← producción real
+6. CRUD completo con axios                   ← todo junto
+```
+
+---
+
+## 1. `fetch` directo en `useEffect`
+
+El punto de partida — el patrón básico que ya conoces de la página 5,
+ahora con tipos explícitos en cada parte:
+
+### `src/components/PostListBasic.tsx`
 
 ```tsx
-// src/components/UserCard.tsx
+// src/components/PostListBasic.tsx
 
-import { memo } from 'react'
+import { useState, useEffect } from 'react'
 
-interface UserCardProps {
-  name:    string
-  email:   string
-  role:    'admin' | 'editor' | 'viewer'
-  onEdit:  () => void
+interface Post {
+  id:     number
+  title:  string
+  body:   string
+  userId: number
 }
 
-// memo — solo re-renderiza si alguna prop cambia (comparación ===)
-const UserCard = memo(function UserCard({
-  name,
-  email,
-  role,
-  onEdit,
-}: UserCardProps) {
+export default function PostListBasic() {
+  const [posts,   setPosts]   = useState<Post[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error,   setError]   = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function fetchPosts() {
+      try {
+        const res = await fetch(
+          'https://jsonplaceholder.typicode.com/posts?_limit=5'
+        )
+        // fetch no lanza en 4xx/5xx — siempre verificar res.ok
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+        const data: Post[] = await res.json()
+        if (!cancelled) setPosts(data)
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Error desconocido')
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    fetchPosts()
+    return () => { cancelled = true }  // limpieza anti race-condition
+  }, [])
+
+  if (loading) return <p style={{ color: '#6b7280' }}>Cargando posts...</p>
+  if (error)   return <p style={{ color: '#dc2626' }}>Error: {error}</p>
+
   return (
-    <div style={{
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      padding: '12px 16px', border: '1px solid #e5e7eb', borderRadius: 8,
-    }}>
-      <div>
-        <p style={{ margin: 0, fontWeight: 600 }}>{name}</p>
-        <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>{email}</p>
-        <span style={{
-          fontSize: 11, padding: '2px 8px', borderRadius: 10,
-          background: role === 'admin' ? '#eff6ff' : '#f9fafb',
-          color:      role === 'admin' ? '#1d4ed8' : '#6b7280',
-          fontWeight: 600,
-        }}>
-          {role}
-        </span>
-      </div>
-      <button
-        onClick={onEdit}
-        style={{
-          padding: '6px 14px', border: '1px solid #d1d5db',
-          borderRadius: 6, background: '#fff', cursor: 'pointer',
-        }}
-      >
-        Editar
-      </button>
-    </div>
+    <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {posts.map(post => (
+        <li
+          key={post.id}
+          style={{ padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: 8 }}
+        >
+          <p style={{ margin: 0, fontWeight: 600, fontSize: 14 }}>{post.title}</p>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#6b7280' }}>
+            {post.body.slice(0, 60)}...
+          </p>
+        </li>
+      ))}
+    </ul>
   )
-})
-
-export default UserCard
+}
 ```
 
 ### Prueba esto
 
-- Cambia `memo(function UserCard(...))` por `function UserCard(...)` (sin memo), añade `console.log('render UserCard')` dentro y haz clic repetidamente en el botón del padre — observa que `UserCard` se re-renderiza en cada clic aunque sus props no hayan cambiado
-- Vuelve a añadir `memo` pero pasa `onEdit` como función anónima `onEdit={() => console.log('edit')}` en el padre — observa en la consola que `UserCard` sigue re-renderizando porque cada render del padre crea una función nueva
-- Envuelve `onEdit` con `useCallback(() => console.log('edit'), [])` en el padre y confirma que el log de render de `UserCard` ya no aparece al hacer clic en el botón del padre
-- Cambia el `role` de `"admin"` a `"viewer"` en las props — observa que `UserCard` sí se re-renderiza porque la prop `role` realmente cambió, que es el comportamiento correcto de `memo`
-- Abre React DevTools, activa "Highlight updates when components render" y haz clic en el botón del padre — con `memo` + `useCallback`, `UserCard` no se resalta; sin ellos, sí
+- Cambia la URL a `'https://jsonplaceholder.typicode.com/posts?_limit=10'` — observa que la lista crece a 10 ítems sin tocar la lógica de fetching
+- Cambia la URL a `'https://jsonplaceholder.typicode.com/posts/9999'` — verifica que `res.ok` es `false`, se lanza el error `"HTTP 404"` y el componente muestra el mensaje de error en rojo
+- Elimina la línea `if (!res.ok) throw new Error(...)` y repite la URL con 404 — observa que sin esa verificación, `fetch` no lanza y `data` llega vacía o con forma inesperada
+- Añade `console.log('fetching...')` antes del `await fetch(...)` y monta/desmonta el componente rápidamente — confirma que el flag `cancelled` evita actualizaciones de estado tras el desmontaje
+- Cambia el tipo `Post[]` a `Post` (singular) en `await res.json()` sin cambiar la URL — TypeScript no lanza error en tiempo de compilación porque `json()` devuelve `any`; observa los errores en runtime al intentar usar `.map`
 
 ---
 
-## El trío: `memo` + `useCallback` + `useMemo`
+## 2. Cliente `fetch` centralizado y tipado
 
-Los tres trabajan juntos. Sin `useCallback`, `memo` no sirve de nada
-cuando se pasan funciones como props.
+En lugar de escribir `fetch(...)` en cada componente, se centraliza en
+un módulo `src/api/fetchClient.ts`. Una función `request<T>` genérica
+maneja el parseo, la verificación de `res.ok` y el tipado de una vez:
 
+### `src/api/fetchClient.ts`
+
+```ts
+// src/api/fetchClient.ts
+
+import type { Post, User, Comment } from '../types'
+
+const BASE = 'https://jsonplaceholder.typicode.com'
+
+// Función base genérica — evita repetir fetch + res.ok + res.json()
+async function request<T>(
+  endpoint: string,
+  options?: RequestInit
+): Promise<T> {
+  const res = await fetch(`${BASE}${endpoint}`, options)
+  if (!res.ok) throw new Error(`HTTP ${res.status} — ${res.statusText}`)
+  return res.json() as Promise<T>
+}
+
+// Objeto con todos los endpoints tipados
+export const fetchApi = {
+  // Lectura
+  getPosts:    () =>
+    request<Post[]>('/posts?_limit=10'),
+  getPost:     (id: number) =>
+    request<Post>(`/posts/${id}`),
+  getUsers:    () =>
+    request<User[]>('/users'),
+  getUser:     (id: number) =>
+    request<User>(`/users/${id}`),
+  getComments: (postId: number) =>
+    request<Comment[]>(`/posts/${postId}/comments`),
+
+  // Escritura
+  createPost: (data: Omit<Post, 'id'>) =>
+    request<Post>('/posts', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(data),
+    }),
+  updatePost: (id: number, data: Partial<Omit<Post, 'id'>>) =>
+    request<Post>(`/posts/${id}`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(data),
+    }),
+  deletePost: (id: number) =>
+    request<void>(`/posts/${id}`, { method: 'DELETE' }),
+}
 ```
-memo       → evita que el hijo re-renderice por props iguales
-useCallback → estabiliza funciones pasadas como props
-useMemo     → estabiliza objetos/arrays calculados pasados como props
-```
-
----
-
-## `src/components/ProductTable.tsx`
-
-Patrón completo: lista con `memo` en cada fila, `useCallback` en los
-handlers y `useMemo` para el array filtrado.
 
 ```tsx
-// src/components/ProductTable.tsx
+// Uso — limpio, sin fetch manual en el componente
+import { fetchApi } from '../api/fetchClient'
 
-import { useState, useCallback, useMemo, memo } from 'react'
+const posts = await fetchApi.getPosts()         // Post[]
+const user  = await fetchApi.getUser(1)         // User
+const post  = await fetchApi.createPost({ ... }) // Post
+```
 
-interface Product {
-  id:       number
-  name:     string
-  price:    number
-  category: string
+### Prueba esto
+
+- Cambia `BASE` a una URL inventada como `'https://api-falsa.xyz'` — observa que todas las funciones del cliente fallan con el mismo error de red sin tener que cambiar nada más
+- Llama `fetchApi.getUser(1)` y `fetchApi.getUser(2)` en el mismo componente — comprueba que ambas llamadas comparten la misma función `request<T>` base y devuelven tipos distintos correctamente tipados
+- Añade un nuevo endpoint `getPostComments: (id: number) => request<Comment[]>(`/posts/${id}/comments`)` al objeto `fetchApi` — verifica que TypeScript infiere `Comment[]` sin configuración adicional
+- Cambia el endpoint `getPosts` para que use `/posts?_limit=3` — observa que todos los componentes que llamen a `fetchApi.getPosts()` reciben automáticamente solo 3 posts
+- Prueba `fetchApi.deletePost(1)` en la consola del navegador — nota que `jsonplaceholder` responde con `{}` y el tipo `void` del cliente no coincide exactamente; observa si TypeScript advierte sobre esto
+
+---
+
+## 3. `useFetchData` — hook con `refetch` manual
+
+La página 9 tenía un `useFetch<T>` básico. Esta versión añade `refetch`:
+una función que fuerza una nueva carga sin cambiar la URL.
+
+### `src/hooks/useFetchData.ts`
+
+```ts
+// src/hooks/useFetchData.ts
+
+import { useState, useEffect, useCallback } from 'react'
+
+interface FetchState<T> {
+  data:    T | null
+  loading: boolean
+  error:   string | null
+  refetch: () => void      // dispara una nueva carga manual
 }
 
-interface ProductRowProps {
-  product:  Product
-  onDelete: (id: number) => void
-  onEdit:   (product: Product) => void
+export function useFetchData<T>(url: string): FetchState<T> {
+  const [data,    setData]    = useState<T | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error,   setError]   = useState<string | null>(null)
+  const [trigger, setTrigger] = useState(0)
+
+  // Cada vez que se llama, incrementa trigger → re-ejecuta el useEffect
+  const refetch = useCallback(() => setTrigger(t => t + 1), [])
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+
+    async function load() {
+      try {
+        const res = await fetch(url)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const json: T = await res.json()
+        if (!cancelled) { setData(json); setLoading(false) }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Error desconocido')
+          setLoading(false)
+        }
+      }
+    }
+
+    load()
+    return () => { cancelled = true }
+  }, [url, trigger])   // trigger en dependencias — refetch re-ejecuta el efecto
+
+  return { data, loading, error, refetch }
+}
+```
+
+### `src/components/UserListWithRefetch.tsx`
+
+```tsx
+// src/components/UserListWithRefetch.tsx
+
+import { useFetchData } from '../hooks/useFetchData'
+
+interface User {
+  id:    number
+  name:  string
+  email: string
 }
 
-// memo — solo re-renderiza si product, onDelete u onEdit cambian
-const ProductRow = memo(function ProductRow({
-  product,
-  onDelete,
-  onEdit,
-}: ProductRowProps) {
-  return (
-    <tr>
-      <td style={{ padding: '10px 12px' }}>{product.name}</td>
-      <td style={{ padding: '10px 12px', color: '#6b7280' }}>{product.category}</td>
-      <td style={{ padding: '10px 12px', fontWeight: 600 }}>${product.price}</td>
-      <td style={{ padding: '10px 12px' }}>
-        <button
-          onClick={() => onEdit(product)}
-          style={actionBtn('#eff6ff', '#1d4ed8')}
-        >
-          Editar
-        </button>
-        <button
-          onClick={() => onDelete(product.id)}
-          style={actionBtn('#fef2f2', '#dc2626')}
-        >
-          Eliminar
-        </button>
-      </td>
-    </tr>
-  )
-})
-
-const INITIAL_PRODUCTS: Product[] = [
-  { id: 1, name: 'Teclado mecánico',  price: 89,  category: 'Periféricos' },
-  { id: 2, name: 'Monitor 27"',       price: 349, category: 'Pantallas'   },
-  { id: 3, name: 'Mouse inalámbrico', price: 29,  category: 'Periféricos' },
-  { id: 4, name: 'Webcam HD',         price: 59,  category: 'Cámaras'     },
-  { id: 5, name: 'Auriculares BT',    price: 149, category: 'Audio'       },
-]
-
-export default function ProductTable() {
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS)
-  const [filter,   setFilter]   = useState('')
-
-  // useCallback — handleDelete mantiene la misma referencia
-  // mientras products no cambie desde fuera
-  const handleDelete = useCallback((id: number) => {
-    setProducts((prev) => prev.filter((p) => p.id !== id))
-  }, [])
-
-  // useCallback con dependencias vacías — onEdit no depende del estado
-  const handleEdit = useCallback((product: Product) => {
-    console.log('Editando producto:', product.name)
-    // aquí abriría un modal, navegaría, etc.
-  }, [])
-
-  // useMemo — filtered solo recalcula cuando products o filter cambian
-  const filtered = useMemo(
-    () => products.filter((p) =>
-      p.name.toLowerCase().includes(filter.toLowerCase()) ||
-      p.category.toLowerCase().includes(filter.toLowerCase())
-    ),
-    [products, filter]
-  )
-
-  const totalValue = useMemo(
-    () => filtered.reduce((acc, p) => acc + p.price, 0),
-    [filtered]
+export default function UserListWithRefetch() {
+  const { data: users, loading, error, refetch } = useFetchData<User[]>(
+    'https://jsonplaceholder.typicode.com/users'
   )
 
   return (
-    <div style={{ maxWidth: 560 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-        <input
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder="Filtrar productos..."
-          style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6, flex: 1 }}
-        />
-        <span style={{ alignSelf: 'center', marginLeft: 16, fontSize: 14, color: '#6b7280' }}>
-          Total: <strong>${totalValue}</strong>
+    <div style={{ maxWidth: 440 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <span style={{ fontSize: 14, color: '#6b7280' }}>
+          {loading ? 'Cargando...' : `${users?.length ?? 0} usuarios`}
         </span>
+        <button
+          onClick={refetch}
+          disabled={loading}
+          style={{
+            padding: '6px 14px', border: '1px solid #d1d5db', borderRadius: 6,
+            background: '#fff', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 13,
+          }}
+        >
+          {loading ? 'Cargando...' : '↺ Recargar'}
+        </button>
       </div>
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-        <thead>
-          <tr style={{ background: '#f9fafb' }}>
-            {['Nombre', 'Categoría', 'Precio', 'Acciones'].map((h) => (
-              <th
-                key={h}
-                style={{
-                  padding: '8px 12px', textAlign: 'left',
-                  fontWeight: 600, fontSize: 12,
-                  color: '#6b7280', borderBottom: '1px solid #e5e7eb',
-                }}
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {filtered.map((product) => (
-            <ProductRow
-              key={product.id}
-              product={product}
-              onDelete={handleDelete}
-              onEdit={handleEdit}
-            />
-          ))}
-        </tbody>
-      </table>
+      {error && <p style={{ color: '#dc2626', fontSize: 13 }}>Error: {error}</p>}
 
-      {filtered.length === 0 && (
-        <p style={{ textAlign: 'center', color: '#9ca3af', padding: 20 }}>
-          Sin resultados.
-        </p>
+      {users && (
+        <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {users.map(user => (
+            <li
+              key={user.id}
+              style={{
+                display: 'flex', justifyContent: 'space-between',
+                padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 8,
+              }}
+            >
+              <span style={{ fontWeight: 500, fontSize: 14 }}>{user.name}</span>
+              <span style={{ fontSize: 13, color: '#6b7280' }}>{user.email}</span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   )
 }
+```
 
-function actionBtn(bg: string, color: string): React.CSSProperties {
+### Prueba esto
+
+- Haz clic en "↺ Recargar" — observa que el botón se desactiva durante la carga y la lista se refresca con los mismos datos (o datos distintos si el servidor cambió)
+- Haz clic en "↺ Recargar" varias veces seguidas rápidamente — verifica que el flag `cancelled` descarta las respuestas anteriores y solo aplica la última gracias al incremento de `trigger`
+- Cambia la URL a `'https://jsonplaceholder.typicode.com/posts'` (100 posts) — observa que `useFetchData<Post[]>` maneja cualquier tipo genérico sin cambios en el hook
+- Modifica el hook para que `refetch` también reciba una nueva URL como parámetro opcional — comprueba que al pasarla, el `useEffect` vuelve a ejecutarse con la nueva URL
+- Añade un timestamp del último fetch junto al botón usando `Date.now()` — observa que se actualiza cada vez que se llama a `refetch`
+- Simula un error pasando una URL inválida y haz clic en "↺ Recargar" — verifica que el estado `error` se actualiza y `loading` vuelve a `false` correctamente
+
+---
+
+## 4. `usePagination` — hook de paginación reutilizable
+
+Separa la lógica de paginación del fetching. Funciona con cualquier array,
+independientemente de cómo se obtuvieron los datos.
+
+### `src/hooks/usePagination.ts`
+
+```ts
+// src/hooks/usePagination.ts
+
+import { useState } from 'react'
+
+interface UsePaginationOptions {
+  totalItems: number
+  pageSize:   number
+}
+
+interface UsePaginationReturn {
+  currentPage: number
+  totalPages:  number
+  goToPage:    (page: number) => void
+  nextPage:    () => void
+  prevPage:    () => void
+  startIndex:  number
+  endIndex:    number
+  canGoNext:   boolean
+  canGoPrev:   boolean
+}
+
+export function usePagination({
+  totalItems,
+  pageSize,
+}: UsePaginationOptions): UsePaginationReturn {
+  const [currentPage, setCurrentPage] = useState(1)
+
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize))
+  const startIndex = (currentPage - 1) * pageSize
+  const endIndex   = Math.min(startIndex + pageSize, totalItems)
+
+  function goToPage(page: number) {
+    setCurrentPage(Math.min(Math.max(1, page), totalPages))
+  }
+
   return {
-    padding: '4px 10px', marginRight: 6,
-    border: 'none', borderRadius: 4,
-    background: bg, color, cursor: 'pointer',
-    fontSize: 12, fontWeight: 500,
+    currentPage,
+    totalPages,
+    goToPage,
+    nextPage:  () => goToPage(currentPage + 1),
+    prevPage:  () => goToPage(currentPage - 1),
+    startIndex,
+    endIndex,
+    canGoNext: currentPage < totalPages,
+    canGoPrev: currentPage > 1,
+  }
+}
+```
+
+### `src/components/PaginatedUserList.tsx`
+
+```tsx
+// src/components/PaginatedUserList.tsx
+
+import { useFetchData }  from '../hooks/useFetchData'
+import { usePagination } from '../hooks/usePagination'
+
+interface User { id: number; name: string; email: string }
+
+const PAGE_SIZE = 3
+
+export default function PaginatedUserList() {
+  const { data: users, loading, error } = useFetchData<User[]>(
+    'https://jsonplaceholder.typicode.com/users'
+  )
+
+  const {
+    currentPage, totalPages,
+    nextPage, prevPage, goToPage,
+    startIndex, endIndex,
+    canGoNext, canGoPrev,
+  } = usePagination({ totalItems: users?.length ?? 0, pageSize: PAGE_SIZE })
+
+  const pageItems = users?.slice(startIndex, endIndex) ?? []
+
+  if (loading) return <p style={{ color: '#6b7280' }}>Cargando...</p>
+  if (error)   return <p style={{ color: '#dc2626' }}>Error: {error}</p>
+
+  return (
+    <div style={{ maxWidth: 440 }}>
+      <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>
+        Mostrando {startIndex + 1}–{endIndex} de {users?.length ?? 0} usuarios
+      </p>
+
+      <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+        {pageItems.map(user => (
+          <li
+            key={user.id}
+            style={{ padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: 8 }}
+          >
+            <p style={{ margin: 0, fontWeight: 600, fontSize: 14 }}>{user.name}</p>
+            <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>{user.email}</p>
+          </li>
+        ))}
+      </ul>
+
+      {/* Controles de paginación con números */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <button onClick={prevPage} disabled={!canGoPrev} style={pgBtn(!canGoPrev)}>
+          ← Ant.
+        </button>
+
+        {Array.from({ length: totalPages }, (_, i) => i + 1).map(n => (
+          <button
+            key={n}
+            onClick={() => goToPage(n)}
+            style={{
+              ...pgBtn(false),
+              background:  n === currentPage ? '#0070f3' : '#fff',
+              color:       n === currentPage ? '#fff'    : '#374151',
+              borderColor: n === currentPage ? '#0070f3' : '#d1d5db',
+              fontWeight:  n === currentPage ? 600 : 400,
+            }}
+          >
+            {n}
+          </button>
+        ))}
+
+        <button onClick={nextPage} disabled={!canGoNext} style={pgBtn(!canGoNext)}>
+          Sig. →
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function pgBtn(disabled: boolean): React.CSSProperties {
+  return {
+    padding: '6px 12px', borderRadius: 6,
+    border: '1px solid #d1d5db',
+    background: '#fff',
+    color:   disabled ? '#9ca3af' : '#374151',
+    cursor:  disabled ? 'not-allowed' : 'pointer',
+    fontSize: 13,
   }
 }
 ```
 
 ### Prueba esto
 
-- Añade `console.log('render ProductRow', product.name)` dentro de `ProductRow` y escribe en el filtro — observa que solo se re-renderizan las filas cuyas props cambiaron, no todas
-- Quita `memo` de `ProductRow` y repite — observa en la consola que todas las filas se re-renderizan en cada pulsación de tecla aunque los datos de los productos no hayan cambiado
-- Cambia `useCallback` de `handleDelete` a una función normal `function handleDelete(id: number) { ... }` declarada dentro de `ProductTable` — observa que todas las filas con `memo` vuelven a re-renderizarse al escribir en el filtro porque `handleDelete` tiene una referencia nueva en cada render
-- Cambia las dependencias de `useMemo` para `filtered` de `[products, filter]` a `[]` — escribe en el filtro y observa que la lista nunca se actualiza porque `filtered` quedó congelado con el valor inicial
-- Elimina `<ProductRow key={product.id} ...>` y pon `key={product.name}` — renombra mentalmente un producto añadiendo un carácter al `name` y observa que React desmonta y vuelve a montar la fila en lugar de actualizarla
-- Haz clic en "Eliminar" en un producto — observa que el `totalValue` se recalcula automáticamente porque `filtered` es una dependencia de ese `useMemo`
+- Cambia `PAGE_SIZE` de `3` a `1` — observa que ahora cada página muestra un solo usuario y el número total de páginas aumenta a 10
+- Cambia `PAGE_SIZE` a `10` — verifica que con 10 usuarios todos caben en una sola página y los botones de paginación quedan desactivados
+- Haz clic en un número de página directamente (por ejemplo "3") — confirma que `goToPage(3)` salta directamente sin pasar por las páginas intermedias
+- Haz clic en "← Ant." cuando estás en la primera página — observa que el botón está desactivado y `canGoPrev` es `false`
+- Pasa `totalItems: 0` al hook — verifica que `totalPages` devuelve `1` (no `0`) gracias a `Math.max(1, ...)` y no aparecen páginas negativas
+- Conecta `usePagination` con un array local de strings en lugar de datos del servidor — confirma que el hook es agnóstico al origen de los datos y funciona igual
 
 ---
 
-## `React.memo` con comparador personalizado
+## 5. Cliente `axios` con interceptores
 
-Por defecto `memo` hace comparación superficial con `===`. Para arrays
-u objetos complejos en props, esa comparación falla — dos arrays con el
-mismo contenido son referencias distintas. El segundo argumento de `memo`
-permite definir la comparación:
+### Instalación
 
-```tsx
-// src/components/ExpensiveChart.tsx
+```bash
+npm install axios
+```
 
-import { memo } from 'react'
+### `src/api/axiosClient.ts`
 
-interface ExpensiveChartProps {
-  data:   number[]
-  label:  string
-  color?: string
-}
+```ts
+// src/api/axiosClient.ts
 
-const ExpensiveChart = memo(
-  function ExpensiveChart({
-    data,
-    label,
-    color = '#0070f3',
-  }: ExpensiveChartProps) {
-    // cálculo costoso — simula una librería de gráficos pesada
-    const max = Math.max(...data)
-    const min = Math.min(...data)
-    const avg = data.reduce((a, b) => a + b, 0) / data.length
+import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
+import type { Post, User } from '../types'
 
-    return (
-      <div style={{ padding: 16, border: '1px solid #e5e7eb', borderRadius: 8 }}>
-        <p style={{ margin: '0 0 8px', fontWeight: 600, color }}>{label}</p>
-        <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
-          <span>Mín: <strong>{min}</strong></span>
-          <span>Máx: <strong>{max}</strong></span>
-          <span>Prom: <strong>{avg.toFixed(1)}</strong></span>
-        </div>
-        {/* Barras simples */}
-        <div style={{ display: 'flex', gap: 4, marginTop: 12, alignItems: 'flex-end', height: 60 }}>
-          {data.map((v, i) => (
-            <div
-              key={i}
-              style={{
-                flex: 1,
-                height: `${(v / max) * 100}%`,
-                background: color,
-                borderRadius: '2px 2px 0 0',
-                opacity: 0.8,
-              }}
-            />
-          ))}
-        </div>
-      </div>
-    )
-  },
-  // Comparador personalizado — evita re-renders cuando el array
-  // tiene el mismo contenido aunque sea una referencia nueva
-  (prevProps, nextProps) =>
-    prevProps.label === nextProps.label &&
-    prevProps.color === nextProps.color &&
-    prevProps.data.length === nextProps.data.length &&
-    prevProps.data.every((v, i) => v === nextProps.data[i])
+// Instancia centralizada — configuración compartida por todos los endpoints
+const api: AxiosInstance = axios.create({
+  baseURL: import.meta.env.VITE_API_URL ?? 'https://jsonplaceholder.typicode.com',
+  timeout: 8000,
+  headers: { 'Content-Type': 'application/json' },
+})
+
+// Interceptor de request — añade el token de auth en cada llamada
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+// Interceptor de response — manejo centralizado de errores HTTP
+api.interceptors.response.use(
+  (response: AxiosResponse) => response,
+  (error: unknown) => {
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status
+
+      if (status === 401) {
+        // Token expirado — redirigir al login
+        localStorage.removeItem('token')
+        window.location.href = '/login'
+      }
+      if (status === 404) console.warn('Recurso no encontrado')
+      if (status === 500) console.warn('Error interno del servidor')
+
+      // Lanza un error con el mensaje del servidor si existe
+      throw new Error(
+        (error.response?.data as { message?: string })?.message
+        ?? error.message
+      )
+    }
+    throw error
+  }
 )
 
-export default ExpensiveChart
-```
-
-> Usa el comparador personalizado con cuidado. Si devuelve `true`
-> (props iguales) cuando en realidad cambiaron, el componente mostrará
-> datos desactualizados. El comparador incorrecto es peor que no tener `memo`.
-
-### Prueba esto
-
-- Pasa `data={[42, 78, 35, 91, 63, 57, 84]}` como array literal en el JSX del padre (sin `useMemo`) — observa que el comparador personalizado evalúa `every` y evita el re-render aunque sea un array nuevo en cada render del padre
-- Quita el comparador personalizado (solo pasa un argumento a `memo`) y pasa el array como literal — observa que ahora `ExpensiveChart` se re-renderiza en cada render del padre porque `===` compara referencias y el array literal es nuevo cada vez
-- Modifica el comparador para que siempre devuelva `true` — cambia un valor en el `data` y observa que el gráfico no se actualiza aunque los datos hayan cambiado; este es el bug que produce un comparador incorrecto
-- Cambia `prevProps.data.length === nextProps.data.length` en el comparador por una comparación falsa como `prevProps.data.length !== nextProps.data.length` — observa que ahora el componente siempre re-renderiza aunque los datos sean iguales
-- Añade `console.log('render ExpensiveChart')` dentro del componente y provoca re-renders del padre — con el comparador correcto, el log no debe aparecer si los datos y el label son iguales
-
----
-
-## Medir renders con `useRef`
-
-Antes de optimizar, verifica que el problema existe. Un contador de renders
-simple con `useRef` muestra cuántas veces se ejecuta cada componente:
-
-```tsx
-// src/components/RenderCounter.tsx
-// Solo para desarrollo — quita antes de producción
-
-import { useRef } from 'react'
-
-interface RenderCounterProps {
-  label: string
+// Endpoints tipados — el genérico en get<T>/post<T> tipará r.data automáticamente
+export const axiosApi = {
+  getPosts:   () =>
+    api.get<Post[]>('/posts?_limit=10').then(r => r.data),
+  getPost:    (id: number) =>
+    api.get<Post>(`/posts/${id}`).then(r => r.data),
+  getUsers:   () =>
+    api.get<User[]>('/users').then(r => r.data),
+  createPost: (data: Omit<Post, 'id'>) =>
+    api.post<Post>('/posts', data).then(r => r.data),
+  updatePost: (id: number, data: Partial<Omit<Post, 'id'>>) =>
+    api.patch<Post>(`/posts/${id}`, data).then(r => r.data),
+  deletePost: (id: number) =>
+    api.delete<void>(`/posts/${id}`).then(r => r.data),
 }
 
-export default function RenderCounter({ label }: RenderCounterProps) {
-  const renderCount = useRef(0)
-  renderCount.current++
-
-  return (
-    <span style={{
-      fontSize: 11, padding: '1px 6px',
-      background: renderCount.current > 3 ? '#fef2f2' : '#f0fdf4',
-      color:      renderCount.current > 3 ? '#dc2626' : '#16a34a',
-      borderRadius: 4, fontFamily: 'monospace',
-    }}>
-      {label}: {renderCount.current} renders
-    </span>
-  )
-}
-```
-
-```tsx
-// Usar temporalmente en el componente que sospechas
-function ProductRow({ product, onDelete, onEdit }: ProductRowProps) {
-  return (
-    <tr>
-      <td><RenderCounter label="ProductRow" /></td>
-      <td>{product.name}</td>
-      ...
-    </tr>
-  )
-}
+export default api
 ```
 
 ### Prueba esto
 
-- Añade `<RenderCounter label="App" />` en `App` y `<RenderCounter label="UserCard" />` en `UserCard` — haz clic en el botón "Re-renderizar App" varias veces y observa que el contador de `App` sube pero el de `UserCard` se mantiene en 1 gracias a `memo`
-- Quita `memo` de `UserCard` temporalmente y observa cómo el contador de `UserCard` ahora sincroniza con el de `App`
-- Observa el cambio de color del badge: después de 3 renders pasa de verde a rojo — usa esto para identificar qué componentes están re-renderizando excesivamente
-- Añade `<RenderCounter label="ProductRow" />` dentro de `ProductRow` y escribe rápido en el filtro — observa cuántos renders se producen por pulsación de tecla con y sin `memo`
-- Comprueba que `renderCount.current++` no provoca re-renders adicionales — a diferencia de `useState`, actualizar un `ref` es silencioso para React
+- Guarda `'fake-token-123'` en `localStorage.setItem('token', 'fake-token-123')` desde la consola del navegador, recarga y realiza cualquier llamada — observa en la pestaña Network de DevTools que la cabecera `Authorization: Bearer fake-token-123` aparece en la petición
+- Cambia `timeout: 8000` a `timeout: 1` (1 ms) — observa que casi todas las peticiones fallan con un error de timeout de axios
+- Modifica el interceptor de respuesta para que haga `console.log(error.response?.status)` antes de lanzar — verifica que el código de estado HTTP aparece en la consola para cualquier error 4xx/5xx
+- Cambia `baseURL` para apuntar a un servidor que devuelva un `401` — observa que el interceptor llama a `localStorage.removeItem('token')` y redirige a `/login`
+- Añade `console.log('request:', config.url)` en el interceptor de request — observa en la consola que cada llamada a `axiosApi.*` registra su URL antes de ser enviada
 
 ---
 
-## Code splitting con `lazy` y `Suspense`
+## 6. CRUD completo con `axios`
 
-`lazy` permite cargar un componente solo cuando se necesita —
-el bundle de ese componente se descarga en ese momento, no al inicio.
-
-En producción esto reduce el tamaño del bundle inicial significativamente.
+### `src/components/PostCrudWithAxios.tsx`
 
 ```tsx
-// src/App.tsx — lazy loading de páginas completas
+// src/components/PostCrudWithAxios.tsx
 
-import { lazy, Suspense } from 'react'
-import { Routes, Route }  from 'react-router-dom'
-import RootLayout         from './layouts/RootLayout'
+import { useState, useEffect } from 'react'
+import { axiosApi }             from '../api/axiosClient'
 
-// Las páginas se cargan solo cuando el usuario navega a esa ruta
-const HomePage          = lazy(() => import('./pages/HomePage'))
-const ProductsPage      = lazy(() => import('./pages/ProductsPage'))
-const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'))
-const DashboardPage     = lazy(() => import('./pages/DashboardPage'))
-const AboutPage         = lazy(() => import('./pages/AboutPage'))
-const NotFoundPage      = lazy(() => import('./pages/NotFoundPage'))
+interface Post {
+  id:     number
+  title:  string
+  body:   string
+  userId: number
+}
 
-function PageLoader() {
+export default function PostCrudWithAxios() {
+  const [posts,   setPosts]   = useState<Post[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error,   setError]   = useState<string | null>(null)
+  const [title,   setTitle]   = useState('')
+  const [saving,  setSaving]  = useState(false)
+
+  // Carga inicial
+  useEffect(() => {
+    axiosApi.getPosts()
+      .then(data => { setPosts(data); setLoading(false) })
+      .catch(err  => { setError(err instanceof Error ? err.message : 'Error'); setLoading(false) })
+  }, [])
+
+  // Crear
+  async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (!title.trim()) return
+    setSaving(true)
+    try {
+      const newPost = await axiosApi.createPost({ title: title.trim(), body: '', userId: 1 })
+      setPosts(prev => [newPost, ...prev])   // añade al principio de la lista
+      setTitle('')
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al crear')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Eliminar
+  async function handleDelete(id: number) {
+    try {
+      await axiosApi.deletePost(id)
+      setPosts(prev => prev.filter(p => p.id !== id))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al eliminar')
+    }
+  }
+
+  if (loading) return <p style={{ color: '#6b7280' }}>Cargando...</p>
+
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
-      <p style={{ color: '#9ca3af' }}>Cargando...</p>
+    <div style={{ maxWidth: 440 }}>
+      {error && (
+        <p style={{ margin: '0 0 12px', fontSize: 13, color: '#dc2626' }}>{error}</p>
+      )}
+
+      {/* Formulario de creación */}
+      <form onSubmit={handleCreate} style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <input
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          placeholder="Título del nuevo post..."
+          disabled={saving}
+          style={{
+            flex: 1, padding: '8px 12px',
+            border: '1px solid #d1d5db', borderRadius: 6, fontSize: 14,
+          }}
+        />
+        <button
+          type="submit"
+          disabled={saving || !title.trim()}
+          style={{
+            padding: '8px 14px', background: '#0070f3', color: '#fff',
+            border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 500,
+          }}
+        >
+          {saving ? '...' : 'Crear'}
+        </button>
+      </form>
+
+      {/* Lista con eliminación */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {posts.map(post => (
+          <div
+            key={post.id}
+            style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: 8,
+            }}
+          >
+            <p style={{ margin: 0, fontSize: 14, flex: 1 }}>{post.title}</p>
+            <button
+              onClick={() => handleDelete(post.id)}
+              style={{
+                marginLeft: 10, padding: '4px 8px',
+                background: '#fef2f2', color: '#dc2626',
+                border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12,
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
-
-export default function App() {
-  return (
-    // Suspense muestra el fallback mientras el chunk se descarga
-    <Suspense fallback={<PageLoader />}>
-      <Routes>
-        <Route element={<RootLayout />}>
-          <Route index                element={<HomePage />} />
-          <Route path="products"      element={<ProductsPage />} />
-          <Route path="products/:id"  element={<ProductDetailPage />} />
-          <Route path="dashboard"     element={<DashboardPage />} />
-          <Route path="about"         element={<AboutPage />} />
-          <Route path="*"             element={<NotFoundPage />} />
-        </Route>
-      </Routes>
-    </Suspense>
-  )
-}
 ```
-
-> `lazy` solo funciona con `export default`. Si el componente usa
-> named export, necesitas un archivo intermedio o adaptas la importación:
->
-> ```tsx
-> // Componente con named export
-> const MyPage = lazy(() =>
->   import('./pages/MyPage').then((m) => ({ default: m.MyPage }))
-> )
-> ```
 
 ### Prueba esto
 
-- Abre las DevTools de red, ve a la pestaña "JS" y navega por primera vez a `/products` — observa que se descarga un chunk separado (algo como `ProductsPage-[hash].js`) solo en ese momento
-- Navega de `/` a `/dashboard` — el chunk del dashboard se descarga solo cuando llegas allí; observa en la red el nuevo archivo `.js`
-- Simula una conexión lenta con el throttling de DevTools (3G lento) y navega a una ruta perezosa — observa el `<p>Cargando...</p>` del `PageLoader` durante la descarga del chunk
-- Elimina `<Suspense>` manteniendo `lazy` y navega a una ruta perezosa — observa el error en consola: React exige un `Suspense` ancestro para cualquier componente `lazy`
-- Cambia `lazy(() => import('./pages/HomePage'))` a `import('./pages/HomePage')` (sin `lazy`) y navega — el componente se carga de inmediato pero el import dinámico sin `lazy` no integra con `Suspense` y React lo trata como una promesa normal
+- Escribe un título y haz clic en "Crear" — observa que el nuevo post aparece al principio de la lista de forma optimista (antes de que el servidor confirme) y el input se vacía
+- Deja el input vacío y haz clic en "Crear" — verifica que la función retorna sin hacer la petición gracias a `if (!title.trim()) return`
+- Haz clic en "✕" junto a cualquier post — observa que desaparece de la lista local instantáneamente (la API de jsonplaceholder simula la eliminación pero no persiste)
+- Crea un post y recarga la página — comprueba que el post creado desaparece, ya que `jsonplaceholder` no guarda los datos entre sesiones
+- Intenta crear un post mientras `saving` es `true` (haz doble clic muy rápido en "Crear") — verifica que el botón queda desactivado durante la petición y no se envían duplicados
+- Modifica `handleDelete` para que muestre un `window.confirm` antes de eliminar — observa que el flujo asíncrono funciona igual dentro del `try/catch`
 
 ---
 
-## `src/App.tsx` — todo junto
+## Variables de entorno con Vite
+
+En proyectos reales la URL de la API no va hardcodeada en el código.
+Vite expone variables de entorno con el prefijo `VITE_`:
+
+```bash
+# .env.development
+VITE_API_URL=https://api.desarrollo.com
+
+# .env.production
+VITE_API_URL=https://api.produccion.com
+```
+
+```ts
+// Acceso desde el código
+const BASE = import.meta.env.VITE_API_URL
+
+// Con valor por defecto si la variable no existe
+const BASE = import.meta.env.VITE_API_URL ?? 'https://jsonplaceholder.typicode.com'
+```
+
+> El prefijo `VITE_` es obligatorio. Variables sin ese prefijo no son
+> accesibles desde el código del navegador — solo desde la configuración
+> de Vite en Node.js.
+
+Para que TypeScript conozca las variables de entorno personalizadas,
+añádelas en `src/vite-env.d.ts`:
+
+```ts
+// src/vite-env.d.ts
+
+/// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+  readonly VITE_API_URL: string
+  // añade aquí todas tus variables VITE_*
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv
+}
+```
+
+---
+
+## `src/App.tsx`
 
 ```tsx
 // src/App.tsx
 
-import { useState, useCallback } from 'react'
-import UserCard       from './components/UserCard'
-import ProductTable   from './components/ProductTable'
-import ExpensiveChart from './components/ExpensiveChart'
-import RenderCounter  from './components/RenderCounter'
+import PostListBasic       from './components/PostListBasic'
+import UserListWithRefetch from './components/UserListWithRefetch'
+import PaginatedUserList   from './components/PaginatedUserList'
+import PostCrudWithAxios   from './components/PostCrudWithAxios'
 
 // ┌──────────────────────────────────────────────────────────────────────┐
 // │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
-// │  1  UserCard      — memo + useCallback, re-renders del padre        │
-// │  2  ProductTable  — memo + useCallback + useMemo en tabla           │
-// │  3  ExpensiveChart — memo con comparador personalizado              │
+// │  1  PostListBasic       — fetch directo en useEffect                │
+// │  2  UserListWithRefetch — useFetchData con refetch manual           │
+// │  3  PaginatedUserList   — paginación con usePagination              │
+// │  4  PostCrudWithAxios   — CRUD completo con axios                   │
 // └──────────────────────────────────────────────────────────────────────┘
 const PASO = 1
 
-const CHART_DATA = [42, 78, 35, 91, 63, 57, 84]
-
-function Step1() {
-  const [count, setCount] = useState(0)
-
-  // useCallback — referencia estable para UserCard memo
-  const handleEditUser = useCallback(() => {
-    console.log('Editando usuario')
-  }, [])
-
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-        <h2 style={{ fontSize: 15, margin: 0 }}>React.memo — UserCard</h2>
-        <RenderCounter label="App" />
-      </div>
-
-      <button
-        onClick={() => setCount((c) => c + 1)}
-        style={{
-          padding: '8px 16px', background: '#6366f1', color: '#fff',
-          border: 'none', borderRadius: 6, cursor: 'pointer', marginBottom: 12,
-        }}
-      >
-        Re-renderizar App ({count} veces)
-      </button>
-
-      <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 12 }}>
-        UserCard tiene memo + onEdit con useCallback — no re-renderiza al hacer clic en el botón.
-      </p>
-
-      <UserCard
-        name="Ana García"
-        email="ana@ejemplo.com"
-        role="admin"
-        onEdit={handleEditUser}
-      />
-    </div>
-  )
-}
-
-function Step2() {
-  return (
-    <div>
-      <h2 style={{ fontSize: 15, marginBottom: 12 }}>
-        memo + useCallback + useMemo — ProductTable
-      </h2>
-      <ProductTable />
-    </div>
-  )
-}
-
-function Step3() {
-  return (
-    <div>
-      <h2 style={{ fontSize: 15, marginBottom: 12 }}>
-        memo con comparador personalizado — ExpensiveChart
-      </h2>
-      <ExpensiveChart
-        data={CHART_DATA}
-        label="Ventas semanales"
-        color="#0070f3"
-      />
-    </div>
-  )
-}
-
 export default function App() {
   const content =
-    PASO === 1 ? <Step1 /> :
-    PASO === 2 ? <Step2 /> :
-    PASO === 3 ? <Step3 /> :
+    PASO === 1 ? <PostListBasic /> :
+    PASO === 2 ? <UserListWithRefetch /> :
+    PASO === 3 ? <PaginatedUserList /> :
+    PASO === 4 ? <PostCrudWithAxios /> :
     <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
 
   return (
-    <main style={{ maxWidth: 580, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
+    <main style={{ maxWidth: 600, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
       {content}
     </main>
   )
 }
 ```
 
-### Prueba esto
-
-- Cambia `PASO` a `1` y guarda — observa `UserCard` con el botón de re-renderizar; el contador de App sube pero `UserCard` no se re-renderiza
-- Cambia `PASO` a `2` y guarda — interactúa con el filtro y con los botones de eliminar; observa el total recalculándose con `useMemo`
-- Cambia `PASO` a `3` y guarda — abre la consola y provoca un re-render del padre; el gráfico no se re-renderiza gracias al comparador personalizado
-- Cambia `PASO` a `99` y guarda — observa el mensaje de error en rojo indicando que el paso no existe
-- En `PASO === 1`, quita `useCallback` de `handleEditUser` y añade `<RenderCounter label="UserCard" />` dentro de `UserCard` — observa que el contador sube con cada clic en el botón aunque el usuario nunca interactuó con la tarjeta
-
 ---
 
-## Cuándo optimizar — y cuándo no
+## Cuándo usar qué
 
-| Optimiza cuando... | No optimizes si... |
+| Situación | Herramienta recomendada |
 |---|---|
-| Tienes listas largas con muchos re-renders medibles | El componente es simple y rápido |
-| Un cálculo tarda visiblemente | Solo tienes 1–2 props simples |
-| Pasas funciones a hijos con `memo` | El valor memoizado se invalida en cada render de todas formas |
-| Puedes medir el problema con DevTools | "Puede que sea lento en el futuro" |
-
-> **Regla de oro**: primero mide, luego optimiza.
-> Añadir `memo`, `useCallback` y `useMemo` en todo el código tiene
-> un costo real — cada hook necesita almacenar el valor anterior y
-> comparar dependencias en cada render. La optimización prematura
-> puede hacer el código más lento, no más rápido.
-
----
-
-## Errores comunes con `memo`
-
-```tsx
-// ❌ memo no sirve si pasas un objeto literal como prop
-// Se crea un objeto nuevo en cada render → memo siempre falla
-<UserCard style={{ color: 'red' }} />
-
-// ✅ Extrae el objeto fuera del componente o usa useMemo
-const cardStyle = { color: 'red' }  // fuera del componente
-<UserCard style={cardStyle} />
-
-// ❌ memo no sirve si pasas una función sin useCallback
-<ProductRow onDelete={() => setItems(...)} />
-
-// ✅ useCallback estabiliza la referencia
-const handleDelete = useCallback((id: number) => {
-  setItems((prev) => prev.filter((i) => i.id !== id))
-}, [])
-<ProductRow onDelete={handleDelete} />
-
-// ❌ Comparador personalizado que siempre retorna true
-const BadMemo = memo(Component, () => true)
-// El componente nunca se actualiza aunque las props cambien
-
-// ❌ Comparador que no compara todos los campos
-const PartialMemo = memo(Component, (prev, next) =>
-  prev.name === next.name  // ignora email, role — bug silencioso
-)
-```
+| Aprendiendo, proyecto pequeño | `fetch` directo en `useEffect` |
+| Varios componentes que fetchen la misma URL | `useFetchData` con caché manual |
+| App con auth, tokens e interceptores | `axios` con cliente centralizado |
+| App con muchos endpoints y caché inteligente | TanStack Query (página 14) |
 
 ---
 
 ## Ejercicios propuestos
 
-1. **Medir antes de optimizar** — crea una lista de 50 `UserCard` en un componente
-   con un input de búsqueda. Añade `RenderCounter` a cada `UserCard`.
-   Verifica cuántos re-renders ocurren al escribir en el input.
-   Luego aplica `memo` + `useCallback` y compara.
+1. **Tabla de usuarios con búsqueda** — usa `useFetchData` para cargar usuarios
+   y filtra el array en memoria con un input de texto. Sin llamadas al servidor
+   por cada letra.
 
-2. **InfiniteList** — crea una lista que empieza con 20 items y tiene un botón
-   "Cargar más" que añade 20 más. Usa `memo` en el componente de cada fila
-   para que los items ya cargados no se re-rendericen al cargar más.
+2. **Botón de recarga con timestamp** — modifica `UserListWithRefetch` para que
+   muestre la hora de la última carga junto al botón de refetch.
 
-3. **LazyDashboard** — crea un dashboard con 3 pestañas pesadas. Cada pestaña
-   es un componente separado cargado con `lazy`. Solo se descarga el componente
-   de la pestaña que el usuario activa.
+3. **Paginación con URL** — combina `usePagination` con `useSearchParams` de
+   React Router para que la página actual se guarde en `?page=2`. Al recargar
+   el navegador, la paginación debe restaurarse.
 
----
+4. **Manejo de timeout** — modifica `useFetchData` para aceptar un parámetro
+   `timeoutMs` y usar `AbortController` + `setTimeout` para cancelar la petición
+   si tarda demasiado.
 
-## Resumen de la página 11
-
-- React re-renderiza un componente cuando cambia su estado, props, contexto o cuando su padre re-renderiza.
-- `React.memo` evita re-renders del hijo cuando sus props no cambian — usa comparación `===` por defecto.
-- `memo` sin `useCallback` es inútil cuando se pasan funciones como props — las funciones son objetos y crean referencias nuevas en cada render.
-- El segundo argumento de `memo` permite un comparador personalizado — útil para arrays y objetos en props.
-- `useMemo` estabiliza arrays y objetos calculados que se pasan como props a componentes con `memo`.
-- `useRef` para contar renders es la forma más rápida de detectar re-renders innecesarios en desarrollo.
-- `lazy` + `Suspense` divide el bundle por rutas — el código de cada página se descarga solo cuando el usuario navega a ella.
-- `lazy` requiere `export default`. Para named exports usa `.then((m) => ({ default: m.Component }))`.
-- Regla de oro: mide primero, optimiza después. La memoización tiene un costo propio.
+5. **Cliente axios con reintentos** — añade un interceptor de respuesta que reintente
+   automáticamente las peticiones fallidas hasta 3 veces con un delay de 1 segundo
+   entre cada intento.
 
 ---
 
-> **Siguiente página →** Formularios y validación: formularios controlados,
-> tipado de eventos, validación manual y con Zod.
+## Resumen de la página 9B
+
+- `fetch` no lanza errores en respuestas 4xx/5xx — siempre verificar `res.ok`.
+- `axios` lanza automáticamente, parsea JSON y permite interceptores globales.
+- Un cliente centralizado (`fetchClient.ts` o `axiosClient.ts`) evita repetir URL base, headers y manejo de errores en cada componente.
+- `useFetchData` con `trigger` + `useCallback` implementa `refetch` sin cambiar la URL.
+- `usePagination` separa la lógica de navegación del fetching — funciona con cualquier array.
+- Los interceptores de `axios` son el lugar correcto para manejar tokens de autenticación y errores HTTP globales.
+- Las variables de entorno en Vite van en `.env.*` con prefijo `VITE_` y se acceden con `import.meta.env.VITE_*`.
+- Para proyectos con múltiples endpoints y necesidad de caché, TanStack Query (página 14) reemplaza `useFetchData` con ventajas significativas.
+
+---
+
+> Esta página se ubica entre la página 9 (hooks personalizados)
+> y la página 10 (React Router), como complemento antes de la arquitectura.

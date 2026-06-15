@@ -592,52 +592,49 @@ const handleDelete = useCallback((id: number) => {
 
 ---
 
-## `src/App.tsx`
+## Navegador de pasos — `App.tsx`
 
 ```tsx
 // src/App.tsx
 
-import AutoFocusForm     from './components/AutoFocusForm'
-import Stopwatch         from './components/Stopwatch'
-import FilterableList    from './components/FilterableList'
-import ProductAnalytics  from './components/ProductAnalytics'
+import AutoFocusForm    from './components/AutoFocusForm'
+import Stopwatch        from './components/Stopwatch'
+import FilterableList   from './components/FilterableList'
+import ProductAnalytics from './components/ProductAnalytics'
+
+// ┌──────────────────────────────────────────────────────────────────────┐
+// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
+// │  1  AutoFocusForm    — useRef: foco automático y tecla Enter        │
+// │  2  Stopwatch        — useRef: interval sin re-renders extra        │
+// │  3  FilterableList   — useCallback: función estable para hijo       │
+// │  4  ProductAnalytics — useMemo: stats y filtro memoizados           │
+// └──────────────────────────────────────────────────────────────────────┘
+const PASO = 1
 
 export default function App() {
+  const content =
+    PASO === 1 ? <AutoFocusForm /> :
+    PASO === 2 ? <Stopwatch /> :
+    PASO === 3 ? <FilterableList /> :
+    PASO === 4 ? <ProductAnalytics /> :
+    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
+
   return (
     <main style={{ maxWidth: 500, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
-
-      <section style={{ marginBottom: 40 }}>
-        <h2 style={{ fontSize: 16, marginBottom: 12 }}>
-          useRef — Foco automático y navegación con teclado
-        </h2>
-        <AutoFocusForm />
-      </section>
-
-      <section style={{ marginBottom: 40 }}>
-        <h2 style={{ fontSize: 16, marginBottom: 12 }}>
-          useRef — Cronómetro con interval persistente
-        </h2>
-        <Stopwatch />
-      </section>
-
-      <section style={{ marginBottom: 40 }}>
-        <h2 style={{ fontSize: 16, marginBottom: 12 }}>
-          useCallback — Lista con eliminación optimizada
-        </h2>
-        <FilterableList />
-      </section>
-
-      <section style={{ marginBottom: 40 }}>
-        <h2 style={{ fontSize: 16, marginBottom: 12 }}>
-          useMemo — Analítica de productos con filtros
-        </h2>
-        <ProductAnalytics />
-      </section>
-
+      {content}
     </main>
   )
 }
 ```
+
+### Prueba esto
+
+- Cambia `PASO` a `2` y guarda — el cronómetro aparece; pulsa Iniciar, Pausar y Reset para verificar que el `intervalRef` se limpia correctamente
+- Cambia `PASO` a `3`, escribe "Peri" en el filtro — solo aparecen los ítems de categoría "Periféricos"; borra el filtro y vuelven todos
+- Cambia `PASO` a `4`, activa el checkbox "Solo en stock" y escribe en el buscador simultáneamente — ambos filtros se aplican a la vez con el segundo `useMemo`
+- Pon `PASO = 5` — aparece el mensaje de error en rojo; es la rama `else` del ternario encadenado
+- Vuelve a `PASO = 1` y pulsa Enter en el campo "Nombre" — el foco salta al campo "Email"; el auto-foco ocurre cada vez que React monta el componente
+- Cambia `maxWidth: 500` a `maxWidth: 800` — todos los componentes usan el espacio extra; `ProductAnalytics` con su grid de 4 columnas se beneficia más
 
 ---
 

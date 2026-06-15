@@ -1,751 +1,761 @@
-# Curso React.js + TypeScript — Página 10
-## Módulo 5 · Arquitectura
-### React Router v7: navegación, rutas anidadas y rutas protegidas
+# Curso React.js + TypeScript — Página 9
+## Módulo 4 · Hooks personalizados
+### Crear, tipar y organizar hooks reutilizables
 
 ---
 
-## ¿Qué es React Router?
+## ¿Qué es un hook personalizado?
 
-React Router es la librería estándar para manejar navegación en aplicaciones
-React. Permite mostrar distintos componentes según la URL sin recargar la página
-— comportamiento de **Single Page Application (SPA)**.
+Un **hook personalizado** es una función TypeScript cuyo nombre comienza
+con `use` que puede llamar otros hooks internamente. Su único propósito es
+**extraer lógica de estado y efectos** de los componentes para reutilizarla.
 
-La versión instalada con `npm install react-router-dom` hoy es la **v7**,
-que mantiene la misma API de componentes de v6 y añade soporte para
-data loading y server rendering. En este módulo cubrimos la API
-de componentes — la más común en proyectos SPA.
+Ahora que conoces todos los hooks nativos, los hooks personalizados son
+simplemente combinaciones de ellos encapsuladas con un nombre descriptivo.
 
-### Instalación
-
-```bash
-npm install react-router-dom
+```
+useToggle       = useState + useCallback
+useDebounce     = useState + useEffect (con clearTimeout)
+useFetch        = useState + useEffect (con fetch + cancelled flag)
+useLocalStorage = useState + useEffect (con localStorage)
+useMediaQuery   = useState + useEffect (con matchMedia)
+useClipboard    = useState + useCallback (con navigator.clipboard)
 ```
 
-No necesitas instalar tipos por separado — `react-router-dom` v7
-incluye sus propias definiciones TypeScript.
+### Reglas que aplican igual que en hooks nativos
 
----
+1. Solo en el nivel superior — nunca dentro de `if`, `for`, funciones anidadas.
+2. Solo en componentes funcionales o en otros hooks personalizados.
+3. El nombre **debe empezar con `use`** — React y ESLint lo exigen.
 
-## Estructura de archivos
+### Estructura de archivos
 
 ```
 src/
-├── pages/              ← un archivo por página/vista
-│   ├── HomePage.tsx
-│   ├── AboutPage.tsx
-│   ├── ProductsPage.tsx
-│   ├── ProductDetailPage.tsx
-│   ├── DashboardPage.tsx
-│   ├── LoginPage.tsx
-│   └── NotFoundPage.tsx
-├── layouts/            ← componentes con <Outlet>
-│   ├── RootLayout.tsx
-│   └── DashboardLayout.tsx
-├── components/
-└── main.tsx
+├── hooks/            ← archivos .ts — sin JSX
+│   ├── useToggle.ts
+│   ├── useCounter.ts
+│   ├── useLocalStorage.ts
+│   ├── useDebounce.ts
+│   ├── useFetch.ts
+│   ├── useWindowSize.ts
+│   ├── useOnlineStatus.ts
+│   ├── useMediaQuery.ts
+│   └── useClipboard.ts
+├── components/       ← archivos .tsx — con JSX
+└── App.tsx
 ```
 
 ---
 
-## Configuración inicial en `main.tsx`
+## `src/hooks/useToggle.ts`
 
-```tsx
-// src/main.tsx
+Estado booleano con tres funciones de control. `useCallback` garantiza
+referencias estables para no causar re-renders innecesarios en hijos.
 
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
-import './index.css'
-import App from './App.tsx'
+```ts
+// src/hooks/useToggle.ts
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
-  </StrictMode>,
-)
+import { useState, useCallback } from 'react'
+
+export function useToggle(initialValue = false) {
+  const [value, setValue] = useState(initialValue)
+
+  const toggle   = useCallback(() => setValue((v) => !v), [])
+  const setTrue  = useCallback(() => setValue(true),      [])
+  const setFalse = useCallback(() => setValue(false),     [])
+
+  return { value, toggle, setTrue, setFalse }
+}
 ```
 
-`BrowserRouter` envuelve toda la aplicación en `main.tsx` —
-no en `App.tsx` — para que todos los componentes puedan acceder
-a los hooks del router.
-
-### Prueba esto
-
-- Mueve `<BrowserRouter>` de `main.tsx` al interior de `App()` y llama a `useNavigate()` en cualquier componente hijo — observa el error `useNavigate() may be used only in the context of a <Router> component`
-- Elimina `<BrowserRouter>` por completo, guarda y navega a `/about` — observa que la URL cambia pero `<Routes>` no renderiza nada o lanza un error de contexto faltante
-- Añade `<React.StrictMode>` si aún no está y observa en la consola que los efectos se ejecutan dos veces en desarrollo — comportamiento esperado y deliberado
-- Cambia `BrowserRouter` por `HashRouter` (importado de `react-router-dom`) y observa que la URL pasa de `localhost:5173/about` a `localhost:5173/#/about`
-- Abre las DevTools de red, recarga la página y observa que solo se descarga un archivo HTML — confirmando que React Router maneja la navegación sin peticiones al servidor
-
----
-
-## Rutas básicas con `Routes` y `Route`
-
 ```tsx
-// src/App.tsx
+// Uso — renombra value al desestructurar para mayor claridad
+import { useToggle } from '../hooks/useToggle'
 
-import { Routes, Route } from 'react-router-dom'
-import HomePage     from './pages/HomePage'
-import AboutPage    from './pages/AboutPage'
-import NotFoundPage from './pages/NotFoundPage'
+export default function ModalDemo() {
+  const { value: isOpen, toggle, setFalse } = useToggle()
 
-export default function App() {
   return (
-    <Routes>
-      <Route path="/"       element={<HomePage />} />
-      <Route path="/about"  element={<AboutPage />} />
-      <Route path="*"       element={<NotFoundPage />} />
-    </Routes>
+    <>
+      <button onClick={toggle}>Abrir modal</button>
+      {isOpen && (
+        <div style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(0,0,0,0.4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: 10,
+            padding: 24, minWidth: 300,
+          }}>
+            <h3 style={{ marginTop: 0 }}>Modal</h3>
+            <p>Contenido del modal.</p>
+            <button onClick={setFalse}>Cerrar</button>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 ```
 
-- `path="/"` — coincide exactamente con la raíz.
-- `path="*"` — captura cualquier ruta no definida arriba — siempre al final.
-- `element` — el componente que se renderiza cuando la URL coincide.
-
 ### Prueba esto
 
-- Escribe `/about` directamente en la barra de URL — observa que `AboutPage` se renderiza sin recargar el HTML del servidor
-- Escribe `/ruta-inexistente` en la URL — observa que `NotFoundPage` se renderiza porque `path="*"` captura todo lo que no coincide
-- Mueve `<Route path="*">` al principio del árbol (antes de `/about`) — observa que ahora cualquier URL renderiza `NotFoundPage` porque `*` captura primero
-- Elimina `<Route path="*">` y navega a una ruta inexistente — observa que la pantalla queda en blanco porque no hay ninguna ruta que coincida
-- Cambia `path="/"` por `path="/home"` y navega a `/` — observa que queda en blanco; navega a `/home` y funciona correctamente
+- Haz clic en "Abrir modal" y luego en "Cerrar" — observa que el overlay desaparece y el botón vuelve a estar disponible
+- Cambia `useToggle()` a `useToggle(true)` — observa que el modal aparece ya abierto al cargar la página
+- Añade un segundo `useToggle` para un segundo modal — comprueba que ambos estados son completamente independientes
+- Reemplaza el botón "Cerrar" por `setTrue` — verifica que el modal ya no se puede cerrar (y que `setTrue` es una referencia estable que no produce re-renders)
+- Haz clic en el overlay oscuro (fuera del panel blanco) y comprueba que el modal no se cierra porque no hay `onClick` en el fondo — añade `onClick={setFalse}` al div del overlay para corregirlo
+- Abre las DevTools de React y observa que `toggle`, `setTrue` y `setFalse` mantienen la misma referencia entre renders gracias a `useCallback`
 
 ---
 
-## Navegación: `Link` y `NavLink`
+## `src/hooks/useCounter.ts`
 
-### `src/layouts/RootLayout.tsx`
+Contador con límites y paso configurables. Demuestra cómo tipar
+opciones con `interface` y retornar una interfaz bien definida.
+
+```ts
+// src/hooks/useCounter.ts
+
+import { useState, useCallback } from 'react'
+
+interface UseCounterOptions {
+  initialValue?: number
+  min?:          number
+  max?:          number
+  step?:         number
+}
+
+interface UseCounterReturn {
+  count:     number
+  increment: () => void
+  decrement: () => void
+  reset:     () => void
+  set:       (value: number) => void
+}
+
+export function useCounter({
+  initialValue = 0,
+  min          = -Infinity,
+  max          = Infinity,
+  step         = 1,
+}: UseCounterOptions = {}): UseCounterReturn {
+  const [count, setCount] = useState(initialValue)
+
+  const increment = useCallback(
+    () => setCount((prev) => Math.min(prev + step, max)),
+    [step, max]
+  )
+  const decrement = useCallback(
+    () => setCount((prev) => Math.max(prev - step, min)),
+    [step, min]
+  )
+  const reset = useCallback(() => setCount(initialValue), [initialValue])
+  const set   = useCallback(
+    (value: number) => setCount(Math.min(Math.max(value, min), max)),
+    [min, max]
+  )
+
+  return { count, increment, decrement, reset, set }
+}
+```
 
 ```tsx
-// src/layouts/RootLayout.tsx
+// Uso
+import { useCounter } from '../hooks/useCounter'
 
-import { Link, NavLink, Outlet } from 'react-router-dom'
+export default function QuantitySelector() {
+  const { count, increment, decrement, reset } = useCounter({
+    initialValue: 1, min: 1, max: 99,
+  })
 
-export default function RootLayout() {
   return (
-    <div style={{ fontFamily: 'sans-serif' }}>
-      <header style={{
-        display: 'flex', alignItems: 'center', gap: 24,
-        padding: '12px 24px', borderBottom: '1px solid #e5e7eb',
-      }}>
-        <Link
-          to="/"
-          style={{ fontWeight: 700, fontSize: 18, textDecoration: 'none', color: '#111' }}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <button
+        onClick={decrement}
+        disabled={count === 1}
+        style={qBtn}
+      >
+        −
+      </button>
+      <span style={{ minWidth: 32, textAlign: 'center', fontWeight: 600 }}>
+        {count}
+      </span>
+      <button
+        onClick={increment}
+        disabled={count === 99}
+        style={qBtn}
+      >
+        +
+      </button>
+      <button onClick={reset} style={{ ...qBtn, fontSize: 11, color: '#9ca3af' }}>
+        Reset
+      </button>
+    </div>
+  )
+}
+
+const qBtn = {
+  width: 30, height: 30, border: '1px solid #d1d5db',
+  borderRadius: 6, background: '#f9fafb', cursor: 'pointer',
+}
+```
+
+### Prueba esto
+
+- Haz clic en "−" cuando el contador está en `1` — observa que el botón está desactivado y el valor no baja de `min`
+- Haz clic en "+" hasta llegar a `99` — comprueba que el botón se desactiva automáticamente al alcanzar `max`
+- Cambia `max: 99` a `max: 5` y verifica que el contador se detiene en `5`
+- Cambia `step: 1` a `step: 10` — observa que cada clic incrementa el valor de diez en diez
+- Haz clic en "Reset" desde cualquier valor — verifica que regresa exactamente al `initialValue` que configuraste
+- Añade `initialValue: 50` y comprueba que el contador empieza en `50` en lugar de `1`
+- Llama a `set(200)` desde la consola de React DevTools o un botón de prueba — observa que el valor queda limitado a `max`
+
+---
+
+## `src/hooks/useLocalStorage.ts`
+
+Hook genérico con `<T>`. El tipo del valor se infiere del argumento inicial.
+`as const` en el retorno fuerza una tupla `[T, Dispatch]` en lugar de
+`(T | Dispatch)[]` — idéntico a la desestructuración de `useState`.
+
+```ts
+// src/hooks/useLocalStorage.ts
+
+import { useState, useEffect } from 'react'
+
+export function useLocalStorage<T>(key: string, initialValue: T) {
+  const [storedValue, setStoredValue] = useState<T>(() => {
+    try {
+      const item = localStorage.getItem(key)
+      return item ? (JSON.parse(item) as T) : initialValue
+    } catch {
+      return initialValue
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(key, JSON.stringify(storedValue))
+    } catch {
+      console.warn(`useLocalStorage: no se pudo guardar "${key}"`)
+    }
+  }, [key, storedValue])
+
+  return [storedValue, setStoredValue] as const
+}
+```
+
+```tsx
+// Uso — API idéntica a useState, pero persiste entre recargas
+import { useLocalStorage } from '../hooks/useLocalStorage'
+
+export default function ThemeSelector() {
+  const [theme, setTheme] = useLocalStorage<'light' | 'dark'>('theme', 'light')
+
+  return (
+    <div style={{ display: 'flex', gap: 8 }}>
+      {(['light', 'dark'] as const).map((t) => (
+        <button
+          key={t}
+          onClick={() => setTheme(t)}
+          style={{
+            padding: '6px 14px', borderRadius: 6,
+            border: '1px solid #d1d5db',
+            background: theme === t ? '#0070f3' : '#fff',
+            color:      theme === t ? '#fff'    : '#333',
+            cursor: 'pointer',
+          }}
         >
-          Mi App
-        </Link>
-
-        <nav style={{ display: 'flex', gap: 16 }}>
-          {[
-            { to: '/',        label: 'Inicio'    },
-            { to: '/products', label: 'Productos' },
-            { to: '/about',   label: 'Acerca de' },
-          ].map(({ to, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}  // evita que "/" quede activo en todas las rutas
-              style={({ isActive }) => ({
-                textDecoration: 'none',
-                fontWeight:   isActive ? 600   : 400,
-                color:        isActive ? '#0070f3' : '#6b7280',
-                borderBottom: isActive ? '2px solid #0070f3' : '2px solid transparent',
-                paddingBottom: 4,
-              })}
-            >
-              {label}
-            </NavLink>
-          ))}
-        </nav>
-      </header>
-
-      <main style={{ maxWidth: 720, margin: '32px auto', padding: '0 16px' }}>
-        <Outlet />  {/* aquí se renderiza la página activa */}
-      </main>
+          {t === 'light' ? '☀️ Claro' : '🌙 Oscuro'}
+        </button>
+      ))}
     </div>
   )
 }
 ```
 
-| Componente | Diferencia |
-|---|---|
-| `<Link to="...">` | Navegación simple — no aplica estilos según la URL activa |
-| `<NavLink to="...">` | Igual pero recibe `{ isActive }` en `style` y `className` |
-
-> `end` en `NavLink` hace que solo esté activo en la ruta exacta,
-> no en rutas hijas. Imprescindible para el enlace raíz `"/"`.
-
 ### Prueba esto
 
-- Quita `end` del `NavLink` de `"/"` y navega a `/products` — observa que el enlace "Inicio" sigue resaltado porque `/` es prefijo de todas las rutas
-- Reemplaza un `<NavLink>` por `<a href="/about">` y haz clic — observa en la pestaña de Red de DevTools que el navegador hace una petición GET completa al servidor, recargando la app
-- Cambia la función de `style` en `NavLink` para que también cambie el `background` cuando está activo — observa el cambio visual al navegar entre rutas
-- Navega a `/products` y luego a `/about` sin recargar — observa en el `Outlet` cómo el contenido cambia pero el `header` permanece igual, demostrando que el layout es compartido
-- Abre las DevTools de React y selecciona el componente `RootLayout` — observa que no se desmonta al navegar, solo cambia lo que está dentro de `<Outlet />`
+- Selecciona "Oscuro", recarga la página (F5) — observa que el tema persiste sin perder el valor gracias a `localStorage`
+- Abre las DevTools del navegador → Application → Local Storage → `localhost` — comprueba que la clave `"theme"` aparece con el valor `"dark"` o `"light"`
+- Elimina manualmente la clave `"theme"` en DevTools y recarga — verifica que el hook vuelve al `initialValue` (`'light'`)
+- Cambia la clave de `'theme'` a `'app-theme'` — observa que el hook crea una nueva entrada en localStorage y la antigua queda huérfana
+- Usa el hook con un tipo distinto, por ejemplo `useLocalStorage<number>('contador', 0)`, y comprueba que TypeScript infiere el tipo correcto en `setStoredValue`
+- Abre dos pestañas del mismo origen y cambia el tema en una — observa que la otra pestaña no se actualiza en tiempo real (el hook no escucha `storage` events por defecto)
 
 ---
 
-## `useParams` — parámetros de URL tipados
+## `src/hooks/useDebounce.ts`
+
+Genérico `<T>` que aplica debounce a cualquier valor.
+Encapsula el patrón `setTimeout` + `clearTimeout` de página 5.
+
+```ts
+// src/hooks/useDebounce.ts
+
+import { useState, useEffect } from 'react'
+
+export function useDebounce<T>(value: T, delay = 500): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value)
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedValue(value), delay)
+    return () => clearTimeout(timer)
+  }, [value, delay])
+
+  return debouncedValue
+}
+```
 
 ```tsx
-// src/pages/ProductDetailPage.tsx
+// Uso — el componente queda libre de gestionar el timer
+import { useState }    from 'react'
+import { useDebounce } from '../hooks/useDebounce'
 
-import { useParams, Link } from 'react-router-dom'
-
-// Define el tipo de los parámetros de la URL
-interface ProductParams {
-  id: string   // los params siempre son string — convierte si necesitas número
-}
-
-export default function ProductDetailPage() {
-  const { id } = useParams<ProductParams>()
-
-  // Convierte a número cuando lo necesites
-  const productId = Number(id)
-
-  if (!id || isNaN(productId)) {
-    return <p style={{ color: '#ef4444' }}>ID de producto inválido.</p>
-  }
+export default function LiveSearch() {
+  const [query, setQuery]  = useState('')
+  const debouncedQuery     = useDebounce(query, 400)
 
   return (
-    <div>
-      <Link
-        to="/products"
-        style={{ fontSize: 13, color: '#6b7280', textDecoration: 'none' }}
-      >
-        ← Volver a productos
-      </Link>
-      <h1 style={{ marginTop: 12 }}>Producto #{productId}</h1>
-      <p style={{ color: '#6b7280' }}>
-        Aquí iría el detalle del producto con ID {productId}.
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 320 }}>
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Buscar..."
+        style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6 }}
+      />
+      <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>
+        Query activa (400ms): <strong>{debouncedQuery || '—'}</strong>
       </p>
     </div>
   )
 }
 ```
 
-```tsx
-// Ruta que define el parámetro
-<Route path="/products/:id" element={<ProductDetailPage />} />
+### Prueba esto
 
-// Link que navega al detalle
-<Link to={`/products/${product.id}`}>Ver detalle</Link>
+- Escribe rápidamente varias letras en el input — observa que `debouncedQuery` solo se actualiza cuando dejas de escribir durante 400ms
+- Cambia el delay de `400` a `2000` — comprueba que ahora tienes que esperar dos segundos de inactividad para que la query se active
+- Cambia el delay a `0` — verifica que `debouncedQuery` se actualiza en cada tecla sin retraso, comportándose como un `useState` normal
+- Escribe algo, espera a que `debouncedQuery` se actualice, y luego borra todo el input — observa que `debouncedQuery` vuelve a `''` y muestra `'—'`
+- Añade un segundo párrafo que muestre `query` (sin debounce) junto a `debouncedQuery` — compara ambos valores mientras escribes para ver la diferencia
+- Aplica `useDebounce` a un número en lugar de un string: `useDebounce<number>(count, 300)` — comprueba que el genérico `<T>` funciona con cualquier tipo
+
+---
+
+## `src/hooks/useFetch.ts`
+
+Fetch genérico con estado completo y cancelación anti-race-condition.
+Extrae toda la complejidad de página 5 en un hook de una línea de uso.
+
+```ts
+// src/hooks/useFetch.ts
+
+import { useState, useEffect } from 'react'
+
+interface FetchState<T> {
+  data:    T | null
+  loading: boolean
+  error:   string | null
+}
+
+export function useFetch<T>(url: string) {
+  const [state, setState] = useState<FetchState<T>>({
+    data: null, loading: true, error: null,
+  })
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function fetchData() {
+      setState((prev) => ({ ...prev, loading: true, error: null }))
+      try {
+        const res = await fetch(url)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data: T = await res.json()
+        if (!cancelled) setState({ data, loading: false, error: null })
+      } catch (err) {
+        if (!cancelled) setState({
+          data:    null,
+          loading: false,
+          error:   err instanceof Error ? err.message : 'Error desconocido',
+        })
+      }
+    }
+
+    fetchData()
+    return () => { cancelled = true }
+  }, [url])
+
+  return state
+}
+```
+
+```tsx
+// Uso — toda la lógica de fetch en una línea
+import { useFetch } from '../hooks/useFetch'
+
+interface Post { id: number; title: string; body: string }
+
+export default function PostList() {
+  const { data: posts, loading, error } = useFetch<Post[]>(
+    'https://jsonplaceholder.typicode.com/posts?_limit=5'
+  )
+
+  if (loading) return <p style={{ color: '#6b7280' }}>Cargando...</p>
+  if (error)   return <p style={{ color: '#ef4444' }}>Error: {error}</p>
+
+  return (
+    <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {posts?.map((post) => (
+        <li key={post.id} style={{ padding: 14, border: '1px solid #e5e7eb', borderRadius: 8 }}>
+          <p style={{ margin: '0 0 4px', fontWeight: 600, fontSize: 14 }}>{post.title}</p>
+          <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>
+            {post.body.slice(0, 80)}...
+          </p>
+        </li>
+      ))}
+    </ul>
+  )
+}
 ```
 
 ### Prueba esto
 
-- Navega a `/products/abc` — observa que `Number('abc')` produce `NaN` y se muestra el mensaje de ID inválido
-- Navega a `/products/3` — observa que `id` es el string `"3"` (no el número `3`); añade un `console.log(typeof id)` para confirmarlo
-- Elimina la comprobación `isNaN(productId)` y pasa un ID texto — observa que el componente renderiza `Producto #NaN` sin ningún error visible, un bug silencioso
-- Añade un segundo parámetro a la ruta cambiando `path` a `/products/:id/:slug` y observa en `useParams` que ambos parámetros están disponibles como strings
-- Cambia el `<Link to="/products">` del botón de volver por `navigate(-1)` y navega desde distintas páginas — observa que siempre vuelve a la página anterior en el historial, no siempre a `/products`
+- Cambia la URL a `'https://jsonplaceholder.typicode.com/posts/99999'` — observa cómo el estado `error` recibe `"HTTP 404"` y el componente muestra el mensaje de error
+- Cambia la URL a `'https://url-que-no-existe.xyz/posts'` — verifica que el error de red (fallo de conexión) también queda capturado en el estado `error`
+- Cambia `?_limit=5` a `?_limit=20` y observa que la lista crece sin modificar nada más en el componente
+- Pasa la URL como prop `url: string` al componente en lugar de tenerla hardcodeada — comprueba que cambiar la prop desde el padre desencadena un nuevo fetch gracias a `[url]` en las dependencias del `useEffect`
+- Agrega `console.log('fetchData called')` dentro de `fetchData` y monta/desmonta el componente varias veces — verifica que el flag `cancelled` evita que se actualice el estado tras el desmontaje
+- Cambia el tipo genérico a `useFetch<Post>` (singular) con una URL de post individual (`/posts/1`) — TypeScript debe inferir que `data` es `Post | null`
 
 ---
 
-## `useNavigate` — navegación programática
+## `src/hooks/useWindowSize.ts`
+
+```ts
+// src/hooks/useWindowSize.ts
+
+import { useState, useEffect } from 'react'
+
+interface WindowSize {
+  width:  number
+  height: number
+}
+
+export function useWindowSize(): WindowSize {
+  const [size, setSize] = useState<WindowSize>({
+    width:  window.innerWidth,
+    height: window.innerHeight,
+  })
+
+  useEffect(() => {
+    function handleResize() {
+      setSize({ width: window.innerWidth, height: window.innerHeight })
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  return size
+}
+```
+
+### Prueba esto
+
+- Redimensiona la ventana del navegador arrastrando su borde — observa que `width` y `height` se actualizan en tiempo real
+- Usa las DevTools del navegador (F12) y activa la vista de dispositivo móvil — comprueba que `width` refleja el ancho del viewport emulado
+- Monta el hook en dos componentes distintos — verifica que cada uno tiene su propio listener y ambos valores se sincronizan al mismo tiempo
+- Desmonta el componente (navega a otro paso en el App) y redimensiona — confirma que no aparecen errores de "state update on unmounted component" gracias al cleanup del `useEffect`
+- Añade `console.log('resize')` dentro de `handleResize` y redimensiona rápidamente — observa que cada pixel de cambio dispara el evento; considera añadir un debounce para optimizar
+
+---
+
+## `src/hooks/useOnlineStatus.ts`
+
+```ts
+// src/hooks/useOnlineStatus.ts
+
+import { useState, useEffect } from 'react'
+
+export function useOnlineStatus(): boolean {
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
+
+  useEffect(() => {
+    function handleOnline()  { setIsOnline(true)  }
+    function handleOffline() { setIsOnline(false) }
+
+    window.addEventListener('online',  handleOnline)
+    window.addEventListener('offline', handleOffline)
+
+    return () => {
+      window.removeEventListener('online',  handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
+  return isOnline
+}
+```
+
+### Prueba esto
+
+- Abre las DevTools del navegador → Network → activa "Offline" — observa que `isOnline` cambia a `false` inmediatamente
+- Vuelve a activar la conexión en DevTools → Network → "Online" — verifica que `isOnline` regresa a `true` sin recargar la página
+- Renderiza el valor en pantalla como un badge: verde si `true`, rojo si `false` — comprueba el cambio de color al simular offline
+- Monta el componente, desconecta la red y vuelve a montar — verifica que el estado inicial lee `navigator.onLine` correctamente en el momento del montaje
+- Añade una notificación toast que aparezca solo cuando se pasa de `true` a `false` usando un `useEffect` que observe `isOnline`
+
+---
+
+## `src/hooks/useMediaQuery.ts`
+
+Encapsula `window.matchMedia`. El genérico no es necesario aquí — siempre retorna `boolean`.
+Útil para layout responsivo sin CSS media queries en JSX.
+
+```ts
+// src/hooks/useMediaQuery.ts
+
+import { useState, useEffect } from 'react'
+
+export function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(
+    () => window.matchMedia(query).matches
+  )
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(query)
+
+    function handleChange(e: MediaQueryListEvent) {
+      setMatches(e.matches)
+    }
+
+    mediaQuery.addEventListener('change', handleChange)
+    return () => mediaQuery.removeEventListener('change', handleChange)
+  }, [query])
+
+  return matches
+}
+```
 
 ```tsx
-// src/pages/LoginPage.tsx
+// Uso — layout responsivo en el componente
+import { useMediaQuery } from '../hooks/useMediaQuery'
+import { useWindowSize } from '../hooks/useWindowSize'
 
-import { useState }     from 'react'
-import { useNavigate }  from 'react-router-dom'
-
-export default function LoginPage() {
-  const navigate = useNavigate()
-  const [email,    setEmail]    = useState('')
-  const [password, setPassword] = useState('')
-  const [loading,  setLoading]  = useState(false)
-
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setLoading(true)
-
-    // Simulación de login
-    await new Promise((r) => setTimeout(r, 800))
-
-    // replace: true — reemplaza la entrada en el historial
-    // el usuario no puede volver al login con el botón "atrás"
-    navigate('/dashboard', { replace: true })
-  }
+export default function ResponsiveLayout() {
+  const isMobile  = useMediaQuery('(max-width: 768px)')
+  const isTablet  = useMediaQuery('(max-width: 1024px)')
+  const { width } = useWindowSize()
 
   return (
-    <div style={{ maxWidth: 320, margin: '0 auto' }}>
-      <h1 style={{ fontSize: 22, marginBottom: 20 }}>Iniciar sesión</h1>
-      <form
-        onSubmit={handleSubmit}
-        style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
-      >
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="Email"
-          required
-          style={inputStyle}
-        />
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Contraseña"
-          required
-          style={inputStyle}
-        />
+    <div style={{
+      padding: isMobile ? 12 : 24,
+      display: 'grid',
+      gridTemplateColumns: isMobile ? '1fr' : isTablet ? '1fr 1fr' : '1fr 1fr 1fr',
+      gap: 12,
+    }}>
+      <div style={{ padding: 16, background: '#f9fafb', borderRadius: 8 }}>
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Vista actual</p>
+        <p style={{ margin: '4px 0 0', fontSize: 12, color: '#6b7280' }}>
+          {isMobile ? 'Móvil' : isTablet ? 'Tablet' : 'Escritorio'} — {width}px
+        </p>
+      </div>
+      <div style={{ padding: 16, background: '#f9fafb', borderRadius: 8 }}>
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Columnas</p>
+        <p style={{ margin: '4px 0 0', fontSize: 12, color: '#6b7280' }}>
+          {isMobile ? 1 : isTablet ? 2 : 3}
+        </p>
+      </div>
+      {!isMobile && (
+        <div style={{ padding: 16, background: '#f9fafb', borderRadius: 8 }}>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Extra</p>
+          <p style={{ margin: '4px 0 0', fontSize: 12, color: '#6b7280' }}>
+            Solo visible en tablet/escritorio
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+```
+
+### Prueba esto
+
+- Redimensiona la ventana del navegador a menos de 768px — observa que el layout cambia a una sola columna y la tarjeta "Extra" desaparece
+- Redimensiona entre 769px y 1024px — verifica que el layout pasa a dos columnas (modo tablet)
+- Usa las DevTools de Chrome con emulación de iPhone — comprueba que `isMobile` es `true` y `padding` cambia de `24` a `12`
+- Cambia el breakpoint de `useMediaQuery('(max-width: 768px)')` a `(max-width: 1200px)` — observa que el umbral de "móvil" se amplía
+- Añade un tercer `useMediaQuery('(prefers-color-scheme: dark)')` — cambia el esquema de color del sistema en las preferencias del SO y observa que el hook reacciona sin recargar la página
+- Pasa una media query inválida como `'not-a-query'` al hook — observa si el navegador lanza un error o simplemente devuelve `false`
+
+---
+
+## `src/hooks/useClipboard.ts`
+
+Copia texto al portapapeles y expone un estado `copied` que vuelve a
+`false` automáticamente tras el delay. `resetDelay` es configurable.
+
+```ts
+// src/hooks/useClipboard.ts
+
+import { useState, useCallback } from 'react'
+
+interface UseClipboardReturn {
+  copy:   (text: string) => Promise<void>
+  copied: boolean
+}
+
+export function useClipboard(resetDelay = 2000): UseClipboardReturn {
+  const [copied, setCopied] = useState(false)
+
+  const copy = useCallback(async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), resetDelay)
+    } catch {
+      console.warn('useClipboard: no se pudo copiar al portapapeles')
+    }
+  }, [resetDelay])
+
+  return { copy, copied }
+}
+```
+
+```tsx
+// Uso — botón de copiar código con feedback visual
+import { useClipboard } from '../hooks/useClipboard'
+
+interface CodeBlockProps {
+  code: string
+  language?: string
+}
+
+export default function CodeBlock({ code, language = 'tsx' }: CodeBlockProps) {
+  const { copy, copied } = useClipboard(1500)
+
+  return (
+    <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden' }}>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '6px 12px', background: '#1e293b',
+      }}>
+        <span style={{ fontSize: 12, color: '#94a3b8' }}>{language}</span>
         <button
-          type="submit"
-          disabled={loading}
+          onClick={() => copy(code)}
           style={{
-            padding: '10px', background: loading ? '#93c5fd' : '#0070f3',
-            color: '#fff', border: 'none', borderRadius: 6,
-            cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 500,
+            padding: '3px 10px', borderRadius: 4,
+            border: '1px solid #334155',
+            background: copied ? '#166534' : '#1e293b',
+            color:      copied ? '#bbf7d0' : '#94a3b8',
+            cursor: 'pointer', fontSize: 12,
+            transition: 'background 0.2s, color 0.2s',
           }}
         >
-          {loading ? 'Entrando...' : 'Entrar'}
+          {copied ? '✓ Copiado' : 'Copiar'}
         </button>
-      </form>
+      </div>
+      <pre style={{
+        margin: 0, padding: '12px 16px',
+        background: '#0f172a', color: '#e2e8f0',
+        fontSize: 13, overflowX: 'auto',
+      }}>
+        <code>{code}</code>
+      </pre>
     </div>
   )
 }
-
-const inputStyle = {
-  padding: '8px 12px',
-  border: '1px solid #d1d5db',
-  borderRadius: 6, fontSize: 14,
-}
-```
-
-### Métodos de `useNavigate`
-
-```tsx
-const navigate = useNavigate()
-
-navigate('/ruta')                   // navegar hacia adelante
-navigate('/ruta', { replace: true }) // reemplaza — sin entrada en historial
-navigate(-1)                         // volver atrás (como botón del navegador)
-navigate(1)                          // avanzar
-navigate('/ruta', { state: { from: 'login' } }) // pasar estado al destino
 ```
 
 ### Prueba esto
 
-- Completa el formulario de login y haz clic en "Entrar" — observa cómo después del `await` de 800 ms la URL cambia a `/dashboard` automáticamente sin que el usuario haga clic en ningún enlace
-- Llega al dashboard via login con `replace: true` y presiona el botón "Atrás" del navegador — observa que no vuelve al formulario de login sino a la página anterior al login
-- Cambia `replace: true` por `replace: false` (o quita la opción) y repite — ahora el botón "Atrás" sí vuelve al login
-- Añade `navigate(-1)` en un botón de "Cancelar" en el formulario — observa que navega a la página anterior en el historial del navegador
-- Pasa `state: { username: email }` en el `navigate` y en `/dashboard` usa `useLocation().state` para mostrar "Bienvenido, ana@ejemplo.com" — observa cómo el estado viaja entre rutas sin query params
+- Haz clic en "Copiar" y pega en un editor de texto — verifica que el contenido copiado coincide exactamente con el código mostrado
+- Observa que el botón cambia a "✓ Copiado" (fondo verde) durante 1500ms y luego vuelve a "Copiar" automáticamente
+- Cambia `resetDelay` de `1500` a `5000` — comprueba que el botón tarda más en volver al estado inicial
+- Pasa `code=""` (string vacío) al componente — verifica que el portapapeles recibe un string vacío y el botón sigue funcionando sin errores
+- Prueba el componente en un contexto sin HTTPS (como `http://localhost` pero con `http` explícito en otro origen) — observa si `navigator.clipboard.writeText` falla y comprueba que el `catch` muestra el warning en la consola sin romper la UI
+- Renderiza dos `CodeBlock` con distintos códigos — comprueba que hacer clic en "Copiar" en uno no afecta al estado `copied` del otro
 
 ---
 
-## `useLocation` y `useSearchParams`
+## `src/App.tsx`
 
 ```tsx
-// src/pages/ProductsPage.tsx
+// src/App.tsx
 
-import { useState, useMemo }  from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import ModalDemo        from './components/ModalDemo'
+import QuantitySelector from './components/QuantitySelector'
+import ThemeSelector    from './components/ThemeSelector'
+import LiveSearch       from './components/LiveSearch'
+import PostList         from './components/PostList'
+import ResponsiveLayout from './components/ResponsiveLayout'
+import CodeBlock        from './components/CodeBlock'
 
-interface Product {
-  id:       number
-  name:     string
-  category: string
-  price:    number
-}
+// ┌──────────────────────────────────────────────────────────────────────┐
+// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
+// │  1  ModalDemo        — useToggle: modal con overlay                 │
+// │  2  QuantitySelector — useCounter: contador con límites             │
+// │  3  ThemeSelector    — useLocalStorage: tema persistente            │
+// │  4  LiveSearch       — useDebounce: búsqueda con delay              │
+// │  5  PostList         — useFetch: lista de posts con fetch genérico  │
+// │  6  ResponsiveLayout — useMediaQuery + useWindowSize: layout        │
+// │  7  CodeBlock        — useClipboard: copiar al portapapeles         │
+// └──────────────────────────────────────────────────────────────────────┘
+const PASO = 1
 
-const PRODUCTS: Product[] = [
-  { id: 1, name: 'Teclado mecánico',  category: 'periféricos',  price: 89  },
-  { id: 2, name: 'Monitor 27"',       category: 'pantallas',    price: 349 },
-  { id: 3, name: 'Mouse inalámbrico', category: 'periféricos',  price: 29  },
-  { id: 4, name: 'Webcam HD',         category: 'cámaras',      price: 59  },
-  { id: 5, name: 'Auriculares BT',    category: 'audio',        price: 149 },
-]
-
-export default function ProductsPage() {
-  // useSearchParams sincroniza filtros con la URL
-  // ?q=teclado&category=periféricos queda en la barra del navegador
-  const [searchParams, setSearchParams] = useSearchParams()
-
-  const query    = searchParams.get('q')        ?? ''
-  const category = searchParams.get('category') ?? ''
-
-  function handleQueryChange(value: string) {
-    setSearchParams(
-      (prev) => { prev.set('q', value); return prev },
-      { replace: true }
-    )
-  }
-
-  function handleCategoryChange(value: string) {
-    setSearchParams(
-      (prev) => {
-        if (value) prev.set('category', value)
-        else       prev.delete('category')
-        return prev
-      },
-      { replace: true }
-    )
-  }
-
-  const filtered = useMemo(() =>
-    PRODUCTS
-      .filter((p) => p.name.toLowerCase().includes(query.toLowerCase()))
-      .filter((p) => !category || p.category === category),
-    [query, category]
-  )
-
-  const categories = [...new Set(PRODUCTS.map((p) => p.category))]
-
-  return (
-    <div>
-      <h1 style={{ fontSize: 22, marginBottom: 16 }}>Productos</h1>
-
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        <input
-          value={query}
-          onChange={(e) => handleQueryChange(e.target.value)}
-          placeholder="Buscar..."
-          style={{ flex: 1, padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6 }}
-        />
-        <select
-          value={category}
-          onChange={(e) => handleCategoryChange(e.target.value)}
-          style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6 }}
-        >
-          <option value="">Todas las categorías</option>
-          {categories.map((cat) => (
-            <option key={cat} value={cat}>{cat}</option>
-          ))}
-        </select>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {filtered.map((product) => (
-          <Link
-            key={product.id}
-            to={`/products/${product.id}`}
-            style={{ textDecoration: 'none', color: 'inherit' }}
-          >
-            <div style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '12px 16px', border: '1px solid #e5e7eb', borderRadius: 8,
-            }}>
-              <div>
-                <p style={{ margin: 0, fontWeight: 500 }}>{product.name}</p>
-                <p style={{ margin: 0, fontSize: 12, color: '#9ca3af' }}>{product.category}</p>
-              </div>
-              <span style={{ fontWeight: 600 }}>${product.price}</span>
-            </div>
-          </Link>
-        ))}
-        {filtered.length === 0 && (
-          <p style={{ color: '#9ca3af' }}>Sin resultados.</p>
-        )}
-      </div>
-    </div>
-  )
-}
-```
-
-### Prueba esto
-
-- Escribe "teclado" en el input y observa cómo la URL cambia a `?q=teclado` — copia esa URL, abre una nueva pestaña y pégala — el filtro se restaura automáticamente
-- Filtra por categoría "periféricos" y luego recarga la página — observa que el filtro sigue activo porque está en la URL (`?category=periféricos`), no en estado de React
-- Elimina `{ replace: true }` de `setSearchParams` y teclea varias letras en el buscador — luego presiona "Atrás" del navegador y observa que retrocede letra a letra en el historial
-- Combina ambos filtros: escribe "mouse" y selecciona "periféricos" — observa en la URL que los dos params coexisten: `?q=mouse&category=periféricos`
-- Llama a `setSearchParams` directamente con `new URLSearchParams()` vacío para limpiar todos los filtros y observa que la lista vuelve a mostrar todos los productos
-
----
-
-## Rutas anidadas con `Outlet`
-
-```tsx
-// src/layouts/DashboardLayout.tsx
-
-import { NavLink, Outlet } from 'react-router-dom'
-
-const NAV_ITEMS = [
-  { to: '',           label: 'Resumen'       },
-  { to: 'analytics',  label: 'Analítica'     },
-  { to: 'settings',   label: 'Configuración' },
-]
-
-export default function DashboardLayout() {
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 24 }}>
-      <aside style={{ borderRight: '1px solid #e5e7eb', paddingRight: 16 }}>
-        <p style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', marginBottom: 8 }}>
-          DASHBOARD
-        </p>
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {NAV_ITEMS.map(({ to, label }) => (
-            <NavLink
-              key={label}
-              to={to}
-              end
-              style={({ isActive }) => ({
-                padding: '6px 10px', borderRadius: 6,
-                textDecoration: 'none', fontSize: 14,
-                background: isActive ? '#eff6ff' : 'transparent',
-                color:      isActive ? '#1d4ed8' : '#374151',
-                fontWeight: isActive ? 600 : 400,
-              })}
-            >
-              {label}
-            </NavLink>
-          ))}
-        </nav>
-      </aside>
-
-      <section>
-        <Outlet />  {/* renderiza la sub-ruta activa aquí */}
-      </section>
-    </div>
-  )
-}
-```
-
-### Prueba esto
-
-- Navega a `/dashboard` — observa que el `Outlet` renderiza `<Overview>` (la sub-ruta `index`) y el sidebar muestra "Resumen" resaltado
-- Navega a `/dashboard/analytics` — observa que el sidebar actualiza el resaltado a "Analítica" sin recargar la página ni desmontar `DashboardLayout`
-- Abre las DevTools de React, selecciona `DashboardLayout` y navega entre sub-rutas — confirma que `DashboardLayout` nunca se desmonta; solo cambia el contenido del `Outlet`
-- Quita `end` de los `NavLink` del sidebar y navega a `/dashboard/analytics` — observa que "Resumen" (ruta vacía `""`) también aparece resaltado al mismo tiempo
-- Añade una nueva entrada `{ to: 'team', label: 'Equipo' }` al array `NAV_ITEMS` sin crear la ruta en `App.tsx` — navega a ella y observa que `NotFoundPage` se renderiza dentro del `Outlet` del dashboard
-
-```tsx
-// src/App.tsx — rutas anidadas
-import { Routes, Route } from 'react-router-dom'
-import RootLayout       from './layouts/RootLayout'
-import DashboardLayout  from './layouts/DashboardLayout'
-import HomePage         from './pages/HomePage'
-import ProductsPage     from './pages/ProductsPage'
-import ProductDetailPage from './pages/ProductDetailPage'
-import AboutPage        from './pages/AboutPage'
-import LoginPage        from './pages/LoginPage'
-import NotFoundPage     from './pages/NotFoundPage'
-
-// Páginas del dashboard (simples por ahora)
-function Overview()   { return <h2>Resumen</h2> }
-function Analytics()  { return <h2>Analítica</h2> }
-function SettingsPage(){ return <h2>Configuración</h2> }
+const EXAMPLE_CODE = `export function useToggle(initial = false) {
+  const [value, setValue] = useState(initial)
+  const toggle = useCallback(() => setValue(v => !v), [])
+  return { value, toggle }
+}`
 
 export default function App() {
+  const content =
+    PASO === 1 ? <ModalDemo /> :
+    PASO === 2 ? <QuantitySelector /> :
+    PASO === 3 ? <ThemeSelector /> :
+    PASO === 4 ? <LiveSearch /> :
+    PASO === 5 ? <PostList /> :
+    PASO === 6 ? <ResponsiveLayout /> :
+    PASO === 7 ? <CodeBlock code={EXAMPLE_CODE} language="tsx" /> :
+    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
+
   return (
-    <Routes>
-      {/* Layout raíz — todas las páginas comparten header */}
-      <Route element={<RootLayout />}>
-        <Route index          element={<HomePage />} />
-        <Route path="products" element={<ProductsPage />} />
-        <Route path="products/:id" element={<ProductDetailPage />} />
-        <Route path="about"   element={<AboutPage />} />
-        <Route path="login"   element={<LoginPage />} />
-
-        {/* Dashboard con su propio layout anidado */}
-        <Route path="dashboard" element={<DashboardLayout />}>
-          <Route index          element={<Overview />} />
-          <Route path="analytics"  element={<Analytics />} />
-          <Route path="settings"   element={<SettingsPage />} />
-        </Route>
-
-        <Route path="*" element={<NotFoundPage />} />
-      </Route>
-    </Routes>
+    <main style={{ maxWidth: 600, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
+      {content}
+    </main>
   )
 }
 ```
 
-El árbol de rutas anidadas genera este comportamiento:
+---
 
-```
-URL: /                    → RootLayout > HomePage
-URL: /products            → RootLayout > ProductsPage
-URL: /products/3          → RootLayout > ProductDetailPage (id="3")
-URL: /dashboard           → RootLayout > DashboardLayout > Overview
-URL: /dashboard/analytics → RootLayout > DashboardLayout > Analytics
-```
+## Cuándo extraer un hook personalizado
 
-### Prueba esto
-
-- Navega a `/products/3` directamente en la barra de URL — observa que `RootLayout` (con el header) se mantiene y solo cambia el contenido principal
-- Cambia `<Route index element={<Overview />} />` por `<Route path="" element={<Overview />} />` y verifica que el comportamiento es idéntico — `index` es azúcar sintáctico para `path=""`
-- Añade `console.log('mount DashboardLayout')` en un `useEffect(() => { ... }, [])` dentro de `DashboardLayout` y navega entre `/dashboard`, `/dashboard/analytics` y `/dashboard/settings` — observa que el log solo aparece una vez, al entrar al dashboard por primera vez
-- Navega a `/dashboard/rutaghosts` y observa que `NotFoundPage` se renderiza en el lugar del `Outlet` de `RootLayout`, no dentro de `DashboardLayout`
-- Mueve la ruta `path="*"` dentro del bloque de `dashboard` — observa que ahora `/dashboard/inexistente` muestra `NotFoundPage` en el panel derecho del dashboard
+| Extrae a hook cuando... | No extraigas cuando... |
+|---|---|
+| La misma lógica aparece en 2+ componentes | Solo se usa en un componente y es breve |
+| Un componente tiene demasiada lógica mezclada | Mover JSX a otro lugar — eso es un componente |
+| Quieres testear la lógica sin montar un componente | La extracción haría el código más difícil de seguir |
+| La lógica involucra hooks y es reutilizable | La lógica es pura JavaScript — usa una función normal |
 
 ---
 
-## Rutas protegidas
+## Resumen de la página 9
 
-```tsx
-// src/components/ProtectedRoute.tsx
-
-import { Navigate, useLocation } from 'react-router-dom'
-
-interface ProtectedRouteProps {
-  isAuthenticated: boolean
-  children:        React.ReactNode
-}
-
-export default function ProtectedRoute({
-  isAuthenticated,
-  children,
-}: ProtectedRouteProps) {
-  const location = useLocation()
-
-  if (!isAuthenticated) {
-    // Guarda la ruta actual para redirigir después del login
-    return <Navigate to="/login" state={{ from: location.pathname }} replace />
-  }
-
-  return <>{children}</>
-}
-```
-
-```tsx
-// Uso en App.tsx
-<Route
-  path="dashboard"
-  element={
-    <ProtectedRoute isAuthenticated={isAuthenticated}>
-      <DashboardLayout />
-    </ProtectedRoute>
-  }
->
-  <Route index element={<Overview />} />
-</Route>
-```
-
-```tsx
-// En LoginPage — recuperar la ruta de origen y redirigir allí
-import { useLocation, useNavigate } from 'react-router-dom'
-
-interface LocationState {
-  from?: string
-}
-
-function LoginPage() {
-  const navigate = useNavigate()
-  const location = useLocation()
-
-  const from = (location.state as LocationState)?.from ?? '/dashboard'
-
-  async function handleLogin() {
-    // ...autenticación
-    navigate(from, { replace: true })  // vuelve a la ruta original
-  }
-}
-```
-
-### Prueba esto
-
-- Pasa `isAuthenticated={false}` a `ProtectedRoute` y navega directamente a `/dashboard` — observa que la URL cambia a `/login` y en `location.state` está la ruta de origen
-- Tras el login exitoso con `navigate(from, { replace: true })`, presiona "Atrás" — observa que no vuelves al login sino a la página anterior al intento de entrar al dashboard
-- Pasa `isAuthenticated={true}` y navega a `/dashboard` — observa que `ProtectedRoute` renderiza `children` directamente sin ninguna redirección
-- Cambia `replace` a `false` en el `<Navigate>` dentro de `ProtectedRoute` y navega a `/dashboard` no autenticado — luego inicia sesión y presiona "Atrás"; observas que vuelves al `/login` (que ya no debería ser accesible)
-- Elimina `state={{ from: location.pathname }}` del `<Navigate>` y completa el login — observa que siempre redirige a `/dashboard` (el fallback `??`), perdiendo la ruta de origen
-- Añade un `console.log(location.state)` en `LoginPage` para inspeccionar el objeto de estado que llega desde `ProtectedRoute`
+- Los hooks personalizados son combinaciones de hooks nativos encapsuladas con un nombre descriptivo.
+- Van en archivos `.ts` dentro de `src/hooks/` — sin JSX, sin extensión `.tsx`.
+- El genérico `<T>` permite que el mismo hook funcione con cualquier tipo — TypeScript infiere `T` del argumento.
+- `as const` en el retorno de una tupla fuerza el tipo correcto para desestructurar igual que `useState`.
+- `useCallback` en los retornos de funciones garantiza referencias estables.
+- `useMediaQuery` recibe el string de la media query y usa `MediaQueryListEvent` para el listener — tipo específico del DOM.
+- La regla de extracción: misma lógica en 2+ componentes, o componente con demasiada lógica mezclada.
 
 ---
 
-## `src/main.tsx` completo
-
-```tsx
-// src/main.tsx
-
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
-import './index.css'
-import App from './App.tsx'
-
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
-  </StrictMode>,
-)
-```
-
----
-
-## Hooks del router — resumen rápido
-
-| Hook | Retorna | Uso típico |
-|---|---|---|
-| `useNavigate()` | función `navigate` | Redirigir programáticamente |
-| `useParams<T>()` | objeto con params de URL | Leer `:id`, `:slug`, etc. |
-| `useLocation()` | objeto `location` | Leer `pathname`, `search`, `state` |
-| `useSearchParams()` | `[params, setParams]` | Leer y escribir query strings `?q=...` |
-
----
-
-## Errores comunes con React Router
-
-```tsx
-// ❌ BrowserRouter dentro de App — los hooks no funcionarán
-// fuera del árbol de BrowserRouter si lo colocas en App
-function App() {
-  return (
-    <BrowserRouter>   {/* ← muévelo a main.tsx */}
-      <Routes>...</Routes>
-    </BrowserRouter>
-  )
-}
-
-// ❌ Usar <a href="..."> en lugar de <Link> — recarga la página
-<a href="/about">Acerca de</a>
-
-// ✅ Siempre Link/NavLink para navegación interna
-<Link to="/about">Acerca de</Link>
-
-// ❌ Olvidar end en NavLink para "/"
-<NavLink to="/">Inicio</NavLink>  // queda activo en /about, /products, etc.
-
-// ✅ end hace que solo esté activo en la ruta exacta
-<NavLink to="/" end>Inicio</NavLink>
-
-// ❌ No convertir el param a número cuando se necesita
-const { id } = useParams<{ id: string }>()
-fetch(`/api/products/${id}`)  // ok — id es string y fetch acepta string
-
-const productId = id   // ❌ si lo usas donde esperan number
-const productId = Number(id)  // ✅ conversión explícita
-```
-
----
-
-## Ejercicios propuestos
-
-1. **Breadcrumbs** — crea un componente `Breadcrumbs` que use `useLocation`
-   para dividir `pathname` por `/` y mostrar la ruta actual como migas de pan.
-   Cada segmento debe ser un `<Link>` a la ruta parcial correspondiente.
-
-2. **Tabs con URL** — crea un componente con 3 pestañas (Perfil, Seguridad, Notificaciones).
-   Cada pestaña actualiza un search param `?tab=profile` con `useSearchParams`.
-   Al recargar la página, la pestaña activa se preserva.
-
-3. **404 personalizado** — crea una `NotFoundPage` que use `useLocation`
-   para mostrar la ruta que no se encontró y un botón que llame a `navigate(-1)`.
-
----
-
-## Resumen de la página 10
-
-- `BrowserRouter` va en `main.tsx` — envuelve toda la aplicación.
-- `Routes` + `Route` definen el árbol de rutas. `path="*"` captura rutas no definidas.
-- `Link` navega sin recargar. `NavLink` recibe `{ isActive }` para estilos condicionales.
-- `end` en `NavLink` es imprescindible para el enlace raíz `/`.
-- `useParams<{ id: string }>()` — los params siempre son `string`, convierte si necesitas otro tipo.
-- `useNavigate()` para redirección programática. `replace: true` evita que la ruta anterior quede en el historial.
-- `useSearchParams()` sincroniza filtros con la URL — los usuarios pueden compartir o marcar la búsqueda.
-- Las rutas anidadas con `<Outlet />` permiten layouts compartidos sin duplicar código.
-- `ProtectedRoute` redirige con `<Navigate>` y guarda la ruta de origen en `location.state`.
-
----
-
-> **Siguiente página →** Rendimiento: `React.memo`, patrones de optimización
-> y herramientas de profiling para detectar re-renders innecesarios.
+> **Siguiente página →** React Router v6: navegación entre páginas,
+> rutas anidadas, parámetros de URL y rutas protegidas con TypeScript.

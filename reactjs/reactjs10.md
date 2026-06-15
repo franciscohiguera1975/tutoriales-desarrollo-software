@@ -1,723 +1,348 @@
-# Curso React.js + TypeScript — Página 9B
-## Módulo 4 · Integración con APIs
-### `fetch`, `axios`, cliente tipado, paginación y CRUD
+# Curso React.js + TypeScript — Página 10
+## Módulo 3 · Hooks nativos
+### `useCallback` — memoización de funciones
 
 ---
 
-## ¿Qué cubre esta página?
+## ¿Qué es `useCallback`?
 
-En las páginas anteriores usaste `fetch` dentro de `useEffect` y extrajiste
-la lógica a un `useFetch` genérico. Esta página profundiza en el tema:
-
-- Comparativa `fetch` vs `axios`
-- Cliente de API tipado y centralizado
-- `useFetchData` con soporte para recarga manual (`refetch`)
-- `usePagination` — hook de paginación reutilizable
-- CRUD completo con `axios` e interceptores
-- Variables de entorno con Vite
-
-Lo cubierto aquí aplica cuando **no usas TanStack Query** (página 14).
-Si usas TanStack Query, muchos de estos patrones los gestiona la librería.
-
----
-
-## `fetch` vs `axios`
-
-`fetch` es nativo del navegador — cero dependencias. `axios` es una librería
-que simplifica varias tareas habituales.
-
-```ts
-// fetch — nativo, sin dependencias
-const res  = await fetch('https://api.ejemplo.com/posts')
-const data = await res.json()  // hay que parsear manualmente
-
-// ⚠️ fetch NO lanza error en respuestas 4xx/5xx
-// Un 404 es una respuesta "exitosa" para fetch — hay que verificar res.ok
-if (!res.ok) throw new Error(`HTTP ${res.status}`)
-```
-
-```ts
-// axios — hay que instalar: npm install axios
-import axios from 'axios'
-
-const { data } = await axios.get('https://api.ejemplo.com/posts')
-// axios parsea JSON automáticamente
-// axios SÍ lanza error en 4xx/5xx — no hace falta verificar
-```
-
-### Comparativa directa
-
-| Característica | `fetch` | `axios` |
-|---|---|---|
-| ¿Nativo? | ✅ Sí — sin instalación | ❌ Requiere `npm install axios` |
-| Parseo de JSON | Manual (`res.json()`) | Automático (`res.data`) |
-| Errores HTTP 4xx/5xx | ❌ No lanza — verificar `res.ok` | ✅ Lanza automáticamente |
-| Interceptores | ❌ No tiene | ✅ `interceptors.request/response` |
-| Cancelación | `AbortController` | `AbortController` o `CancelToken` |
-| Timeout | Manual con `AbortController` | Opción `timeout` en la config |
-| TypeScript | Tipos básicos del DOM | Tipado genérico en `get<T>()` |
-| Tamaño | 0 KB | ~14 KB (minificado) |
-
-> **Cuándo usar cada uno**: para proyectos pequeños o cuando el bundle size importa,
-> `fetch` es suficiente. Para proyectos con autenticación, interceptores y múltiples
-> endpoints, `axios` reduce código repetido significativamente.
-
----
-
-## Práctica progresiva — de simple a complejo
-
-Los ejemplos avanzan en este orden:
-
-```
-1. fetch directo en useEffect                ← lo más simple
-2. Cliente fetch centralizado y tipado       ← sin repetición
-3. useFetchData con refetch manual           ← hook reutilizable
-4. usePagination                             ← hook de UI
-5. Cliente axios con interceptores           ← producción real
-6. CRUD completo con axios                   ← todo junto
-```
-
----
-
-## 1. `fetch` directo en `useEffect`
-
-El punto de partida — el patrón básico que ya conoces de la página 5,
-ahora con tipos explícitos en cada parte:
-
-### `src/components/PostListBasic.tsx`
+`useCallback` **memoriza la referencia de una función** y solo la recrea cuando alguna
+de sus dependencias cambia. Sin él, cada render genera una nueva instancia de la función
+— aunque el código sea idéntico.
 
 ```tsx
-// src/components/PostListBasic.tsx
+const handleClick = useCallback(() => {
+  doSomething(id)
+}, [id])
+// ↑ la misma referencia mientras `id` no cambie
+```
 
-import { useState, useEffect } from 'react'
+```tsx
+// ❌ Sin useCallback — nueva función en cada render
+const handleDelete = (id: number) => remove(id)   // objeto nuevo → hijo re-renderiza siempre
 
-interface Post {
-  id:     number
-  title:  string
-  body:   string
-  userId: number
+// ✅ Con useCallback — referencia estable
+const handleDelete = useCallback((id: number) => remove(id), [remove])
+```
+
+---
+
+## Por qué importa la referencia estable
+
+En JavaScript, dos funciones con el mismo código **no son iguales**:
+
+```tsx
+const a = () => {}
+const b = () => {}
+console.log(a === b) // false — objetos distintos en memoria
+```
+
+React.memo compara props con `===`. Si el padre pasa `handleDelete` sin `useCallback`,
+el hijo recibe un objeto nuevo en cada render y **siempre re-renderiza**, anulando el memo.
+
+---
+
+## Cuándo usar `useCallback`
+
+| Situación | Usar `useCallback` |
+|---|---|
+| Función pasada como prop a un hijo con `React.memo` | ✅ Sí |
+| Función en el array de dependencias de `useEffect` | ✅ Sí |
+| Handler de formulario local sin hijos memoizados | ❌ No |
+| Función que no sale del componente | ❌ No |
+
+> **Regla práctica**: si la función no se pasa a ningún hijo ni entra en `useEffect`,
+> `useCallback` añade complejidad sin beneficio.
+
+---
+
+## Dependencias de `useCallback`
+
+```tsx
+// ✅ Correcto — incluye todos los valores del scope que usa la función
+const fn = useCallback(() => {
+  doSomethingWith(count, userId)
+}, [count, userId])
+
+// ❌ Dependencia olvidada — fn usa count pero no lo declara
+const fn = useCallback(() => {
+  doSomethingWith(count, userId)
+}, [userId])   // count stale cuando cambia
+```
+
+---
+
+## Fase 1 — `src/components/MemoizedList.tsx`
+
+Demuestra el problema de re-renders con `React.memo` y cómo `useCallback`
+lo soluciona. Un counter independiente provoca renders del padre — sin callback
+estable, cada fila re-renderiza aunque sus datos no cambien.
+
+```tsx
+// src/components/MemoizedList.tsx
+
+import { useState, useCallback, memo } from 'react'
+
+interface Task {
+  id:        number
+  text:      string
+  completed: boolean
 }
 
-export default function PostListBasic() {
-  const [posts,   setPosts]   = useState<Post[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState<string | null>(null)
+const INITIAL_TASKS: Task[] = [
+  { id: 1, text: 'Diseñar la interfaz',    completed: false },
+  { id: 2, text: 'Implementar los hooks',  completed: true  },
+  { id: 3, text: 'Escribir los tests',     completed: false },
+  { id: 4, text: 'Revisar accesibilidad',  completed: false },
+  { id: 5, text: 'Deploy en producción',   completed: false },
+]
 
-  useEffect(() => {
-    let cancelled = false
+// ─── Fila memoizada ──────────────────────────────────────────────────────
+let rowRenderCount = 0
 
-    async function fetchPosts() {
-      try {
-        const res = await fetch(
-          'https://jsonplaceholder.typicode.com/posts?_limit=5'
-        )
-        // fetch no lanza en 4xx/5xx — siempre verificar res.ok
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-
-        const data: Post[] = await res.json()
-        if (!cancelled) setPosts(data)
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Error desconocido')
-        }
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-
-    fetchPosts()
-    return () => { cancelled = true }  // limpieza anti race-condition
-  }, [])
-
-  if (loading) return <p style={{ color: '#6b7280' }}>Cargando posts...</p>
-  if (error)   return <p style={{ color: '#dc2626' }}>Error: {error}</p>
+const TaskRow = memo(function TaskRow({
+  task,
+  onToggle,
+  onDelete,
+}: {
+  task:     Task
+  onToggle: (id: number) => void
+  onDelete: (id: number) => void
+}) {
+  rowRenderCount++
+  const count = rowRenderCount
 
   return (
-    <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {posts.map(post => (
-        <li
-          key={post.id}
-          style={{ padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: 8 }}
+    <div style={{
+      display:        'flex',
+      alignItems:     'center',
+      gap:            10,
+      padding:        '10px 14px',
+      background:     task.completed ? '#f0fdf4' : '#fafafa',
+      borderRadius:   8,
+      border:         '1px solid',
+      borderColor:    task.completed ? '#86efac' : '#e5e5e5',
+    }}>
+      <input
+        type="checkbox"
+        checked={task.completed}
+        onChange={() => onToggle(task.id)}
+        style={{ cursor: 'pointer', width: 16, height: 16 }}
+      />
+      <span style={{
+        flex:           1,
+        fontSize:       14,
+        textDecoration: task.completed ? 'line-through' : 'none',
+        color:          task.completed ? '#666' : '#111',
+      }}>
+        {task.text}
+      </span>
+      <span style={{ fontSize: 11, color: '#aaa' }}>render #{count}</span>
+      <button
+        onClick={() => onDelete(task.id)}
+        style={{
+          padding:      '2px 8px',
+          borderRadius: 4,
+          border:       '1px solid #fca5a5',
+          background:   '#fef2f2',
+          color:        '#dc2626',
+          cursor:       'pointer',
+          fontSize:     12,
+        }}
+      >
+        ✕
+      </button>
+    </div>
+  )
+})
+
+// ─── Padre ───────────────────────────────────────────────────────────────
+export default function MemoizedList() {
+  const [tasks,   setTasks]   = useState<Task[]>(INITIAL_TASKS)
+  const [counter, setCounter] = useState(0)
+
+  // useCallback: onToggle y onDelete tienen referencia estable
+  // TaskRow no re-renderiza cuando solo cambia `counter`
+  const handleToggle = useCallback((id: number) => {
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t))
+  }, []) // sin dependencias externas — setTasks es estable
+
+  const handleDelete = useCallback((id: number) => {
+    setTasks(prev => prev.filter(t => t.id !== id))
+  }, [])
+
+  return (
+    <div style={{ fontFamily: 'sans-serif', maxWidth: 520, margin: '0 auto', padding: 24 }}>
+      <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>MemoizedList</h2>
+      <p style={{ color: '#666', fontSize: 14, marginBottom: 20 }}>
+        <code>React.memo</code> + <code>useCallback</code> — las filas no re-renderizan por un counter ajeno.
+      </p>
+
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 20 }}>
+        <button
+          onClick={() => setCounter(c => c + 1)}
+          style={{ padding: '6px 16px', borderRadius: 6, border: '1px solid #ccc', cursor: 'pointer' }}
         >
-          <p style={{ margin: 0, fontWeight: 600, fontSize: 14 }}>{post.title}</p>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#6b7280' }}>
-            {post.body.slice(0, 60)}...
-          </p>
-        </li>
-      ))}
-    </ul>
+          Incrementar counter ({counter})
+        </button>
+        <span style={{ fontSize: 13, color: '#888' }}>
+          ← no debe re-renderizar las filas
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {tasks.map(task => (
+          <TaskRow
+            key={task.id}
+            task={task}
+            onToggle={handleToggle}
+            onDelete={handleDelete}
+          />
+        ))}
+      </div>
+
+      <p style={{ marginTop: 16, fontSize: 12, color: '#aaa' }}>
+        Render total de filas: {rowRenderCount}
+        {' '}(debería crecer solo al hacer toggle o delete, no al pulsar el counter)
+      </p>
+    </div>
   )
 }
 ```
 
 ### Prueba esto
 
-- Cambia la URL a `'https://jsonplaceholder.typicode.com/posts?_limit=10'` — observa que la lista crece a 10 ítems sin tocar la lógica de fetching
-- Cambia la URL a `'https://jsonplaceholder.typicode.com/posts/9999'` — verifica que `res.ok` es `false`, se lanza el error `"HTTP 404"` y el componente muestra el mensaje de error en rojo
-- Elimina la línea `if (!res.ok) throw new Error(...)` y repite la URL con 404 — observa que sin esa verificación, `fetch` no lanza y `data` llega vacía o con forma inesperada
-- Añade `console.log('fetching...')` antes del `await fetch(...)` y monta/desmonta el componente rápidamente — confirma que el flag `cancelled` evita actualizaciones de estado tras el desmontaje
-- Cambia el tipo `Post[]` a `Post` (singular) en `await res.json()` sin cambiar la URL — TypeScript no lanza error en tiempo de compilación porque `json()` devuelve `any`; observa los errores en runtime al intentar usar `.map`
+- Pulsa "Incrementar counter" varias veces — el número de fila ("render #N") **no debe cambiar**; las filas no re-renderizan
+- Marca una tarea como completada — solo **esa fila** incrementa su contador de render
+- Elimina una tarea — las demás filas no re-renderizan
+- Comenta `useCallback` y sustituye por funciones normales — pulsa el counter y observa que TODAS las filas re-renderizan cada vez
+- Nota que `handleToggle` y `handleDelete` tienen deps `[]` — `setTasks` (forma funcional) no necesita declararse
 
 ---
 
-## 2. Cliente `fetch` centralizado y tipado
+## Fase 2 — `src/components/SearchWithFetch.tsx`
 
-En lugar de escribir `fetch(...)` en cada componente, se centraliza en
-un módulo `src/api/fetchClient.ts`. Una función `request<T>` genérica
-maneja el parseo, la verificación de `res.ok` y el tipado de una vez:
-
-### `src/api/fetchClient.ts`
-
-```ts
-// src/api/fetchClient.ts
-
-import type { Post, User, Comment } from '../types'
-
-const BASE = 'https://jsonplaceholder.typicode.com'
-
-// Función base genérica — evita repetir fetch + res.ok + res.json()
-async function request<T>(
-  endpoint: string,
-  options?: RequestInit
-): Promise<T> {
-  const res = await fetch(`${BASE}${endpoint}`, options)
-  if (!res.ok) throw new Error(`HTTP ${res.status} — ${res.statusText}`)
-  return res.json() as Promise<T>
-}
-
-// Objeto con todos los endpoints tipados
-export const fetchApi = {
-  // Lectura
-  getPosts:    () =>
-    request<Post[]>('/posts?_limit=10'),
-  getPost:     (id: number) =>
-    request<Post>(`/posts/${id}`),
-  getUsers:    () =>
-    request<User[]>('/users'),
-  getUser:     (id: number) =>
-    request<User>(`/users/${id}`),
-  getComments: (postId: number) =>
-    request<Comment[]>(`/posts/${postId}/comments`),
-
-  // Escritura
-  createPost: (data: Omit<Post, 'id'>) =>
-    request<Post>('/posts', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(data),
-    }),
-  updatePost: (id: number, data: Partial<Omit<Post, 'id'>>) =>
-    request<Post>(`/posts/${id}`, {
-      method:  'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(data),
-    }),
-  deletePost: (id: number) =>
-    request<void>(`/posts/${id}`, { method: 'DELETE' }),
-}
-```
+`useCallback` para estabilizar una función de fetch que entra en el array de
+dependencias de `useEffect`. Sin él, `useEffect` correría en bucle infinito.
 
 ```tsx
-// Uso — limpio, sin fetch manual en el componente
-import { fetchApi } from '../api/fetchClient'
-
-const posts = await fetchApi.getPosts()         // Post[]
-const user  = await fetchApi.getUser(1)         // User
-const post  = await fetchApi.createPost({ ... }) // Post
-```
-
-### Prueba esto
-
-- Cambia `BASE` a una URL inventada como `'https://api-falsa.xyz'` — observa que todas las funciones del cliente fallan con el mismo error de red sin tener que cambiar nada más
-- Llama `fetchApi.getUser(1)` y `fetchApi.getUser(2)` en el mismo componente — comprueba que ambas llamadas comparten la misma función `request<T>` base y devuelven tipos distintos correctamente tipados
-- Añade un nuevo endpoint `getPostComments: (id: number) => request<Comment[]>(`/posts/${id}/comments`)` al objeto `fetchApi` — verifica que TypeScript infiere `Comment[]` sin configuración adicional
-- Cambia el endpoint `getPosts` para que use `/posts?_limit=3` — observa que todos los componentes que llamen a `fetchApi.getPosts()` reciben automáticamente solo 3 posts
-- Prueba `fetchApi.deletePost(1)` en la consola del navegador — nota que `jsonplaceholder` responde con `{}` y el tipo `void` del cliente no coincide exactamente; observa si TypeScript advierte sobre esto
-
----
-
-## 3. `useFetchData` — hook con `refetch` manual
-
-La página 9 tenía un `useFetch<T>` básico. Esta versión añade `refetch`:
-una función que fuerza una nueva carga sin cambiar la URL.
-
-### `src/hooks/useFetchData.ts`
-
-```ts
-// src/hooks/useFetchData.ts
+// src/components/SearchWithFetch.tsx
 
 import { useState, useEffect, useCallback } from 'react'
 
-interface FetchState<T> {
-  data:    T | null
-  loading: boolean
-  error:   string | null
-  refetch: () => void      // dispara una nueva carga manual
+interface Post {
+  id:    number
+  title: string
+  body:  string
 }
 
-export function useFetchData<T>(url: string): FetchState<T> {
-  const [data,    setData]    = useState<T | null>(null)
-  const [loading, setLoading] = useState(true)
+export default function SearchWithFetch() {
+  const [query,   setQuery]   = useState('')
+  const [posts,   setPosts]   = useState<Post[]>([])
+  const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState<string | null>(null)
-  const [trigger, setTrigger] = useState(0)
 
-  // Cada vez que se llama, incrementa trigger → re-ejecuta el useEffect
-  const refetch = useCallback(() => setTrigger(t => t + 1), [])
-
-  useEffect(() => {
-    let cancelled = false
+  // useCallback: fetchPosts es estable mientras `query` no cambie.
+  // Sin useCallback, sería una función nueva en cada render
+  // → useEffect la vería como nueva dep → bucle infinito.
+  const fetchPosts = useCallback(async () => {
     setLoading(true)
     setError(null)
-
-    async function load() {
-      try {
-        const res = await fetch(url)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const json: T = await res.json()
-        if (!cancelled) { setData(json); setLoading(false) }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Error desconocido')
-          setLoading(false)
-        }
-      }
+    try {
+      const url = query.trim()
+        ? `https://jsonplaceholder.typicode.com/posts?_limit=5&title_like=${encodeURIComponent(query)}`
+        : 'https://jsonplaceholder.typicode.com/posts?_limit=5'
+      const res  = await fetch(url)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data: Post[] = await res.json()
+      setPosts(data)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error desconocido')
+    } finally {
+      setLoading(false)
     }
+  }, [query]) // ← recrear solo cuando query cambia
 
-    load()
-    return () => { cancelled = true }
-  }, [url, trigger])   // trigger en dependencias — refetch re-ejecuta el efecto
-
-  return { data, loading, error, refetch }
-}
-```
-
-### `src/components/UserListWithRefetch.tsx`
-
-```tsx
-// src/components/UserListWithRefetch.tsx
-
-import { useFetchData } from '../hooks/useFetchData'
-
-interface User {
-  id:    number
-  name:  string
-  email: string
-}
-
-export default function UserListWithRefetch() {
-  const { data: users, loading, error, refetch } = useFetchData<User[]>(
-    'https://jsonplaceholder.typicode.com/users'
-  )
+  // useEffect seguro — fetchPosts es estable, no hay bucle
+  useEffect(() => {
+    fetchPosts()
+  }, [fetchPosts])
 
   return (
-    <div style={{ maxWidth: 440 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <span style={{ fontSize: 14, color: '#6b7280' }}>
-          {loading ? 'Cargando...' : `${users?.length ?? 0} usuarios`}
-        </span>
-        <button
-          onClick={refetch}
-          disabled={loading}
-          style={{
-            padding: '6px 14px', border: '1px solid #d1d5db', borderRadius: 6,
-            background: '#fff', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 13,
-          }}
-        >
-          {loading ? 'Cargando...' : '↺ Recargar'}
-        </button>
-      </div>
-
-      {error && <p style={{ color: '#dc2626', fontSize: 13 }}>Error: {error}</p>}
-
-      {users && (
-        <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {users.map(user => (
-            <li
-              key={user.id}
-              style={{
-                display: 'flex', justifyContent: 'space-between',
-                padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 8,
-              }}
-            >
-              <span style={{ fontWeight: 500, fontSize: 14 }}>{user.name}</span>
-              <span style={{ fontSize: 13, color: '#6b7280' }}>{user.email}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  )
-}
-```
-
-### Prueba esto
-
-- Haz clic en "↺ Recargar" — observa que el botón se desactiva durante la carga y la lista se refresca con los mismos datos (o datos distintos si el servidor cambió)
-- Haz clic en "↺ Recargar" varias veces seguidas rápidamente — verifica que el flag `cancelled` descarta las respuestas anteriores y solo aplica la última gracias al incremento de `trigger`
-- Cambia la URL a `'https://jsonplaceholder.typicode.com/posts'` (100 posts) — observa que `useFetchData<Post[]>` maneja cualquier tipo genérico sin cambios en el hook
-- Modifica el hook para que `refetch` también reciba una nueva URL como parámetro opcional — comprueba que al pasarla, el `useEffect` vuelve a ejecutarse con la nueva URL
-- Añade un timestamp del último fetch junto al botón usando `Date.now()` — observa que se actualiza cada vez que se llama a `refetch`
-- Simula un error pasando una URL inválida y haz clic en "↺ Recargar" — verifica que el estado `error` se actualiza y `loading` vuelve a `false` correctamente
-
----
-
-## 4. `usePagination` — hook de paginación reutilizable
-
-Separa la lógica de paginación del fetching. Funciona con cualquier array,
-independientemente de cómo se obtuvieron los datos.
-
-### `src/hooks/usePagination.ts`
-
-```ts
-// src/hooks/usePagination.ts
-
-import { useState } from 'react'
-
-interface UsePaginationOptions {
-  totalItems: number
-  pageSize:   number
-}
-
-interface UsePaginationReturn {
-  currentPage: number
-  totalPages:  number
-  goToPage:    (page: number) => void
-  nextPage:    () => void
-  prevPage:    () => void
-  startIndex:  number
-  endIndex:    number
-  canGoNext:   boolean
-  canGoPrev:   boolean
-}
-
-export function usePagination({
-  totalItems,
-  pageSize,
-}: UsePaginationOptions): UsePaginationReturn {
-  const [currentPage, setCurrentPage] = useState(1)
-
-  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize))
-  const startIndex = (currentPage - 1) * pageSize
-  const endIndex   = Math.min(startIndex + pageSize, totalItems)
-
-  function goToPage(page: number) {
-    setCurrentPage(Math.min(Math.max(1, page), totalPages))
-  }
-
-  return {
-    currentPage,
-    totalPages,
-    goToPage,
-    nextPage:  () => goToPage(currentPage + 1),
-    prevPage:  () => goToPage(currentPage - 1),
-    startIndex,
-    endIndex,
-    canGoNext: currentPage < totalPages,
-    canGoPrev: currentPage > 1,
-  }
-}
-```
-
-### `src/components/PaginatedUserList.tsx`
-
-```tsx
-// src/components/PaginatedUserList.tsx
-
-import { useFetchData }  from '../hooks/useFetchData'
-import { usePagination } from '../hooks/usePagination'
-
-interface User { id: number; name: string; email: string }
-
-const PAGE_SIZE = 3
-
-export default function PaginatedUserList() {
-  const { data: users, loading, error } = useFetchData<User[]>(
-    'https://jsonplaceholder.typicode.com/users'
-  )
-
-  const {
-    currentPage, totalPages,
-    nextPage, prevPage, goToPage,
-    startIndex, endIndex,
-    canGoNext, canGoPrev,
-  } = usePagination({ totalItems: users?.length ?? 0, pageSize: PAGE_SIZE })
-
-  const pageItems = users?.slice(startIndex, endIndex) ?? []
-
-  if (loading) return <p style={{ color: '#6b7280' }}>Cargando...</p>
-  if (error)   return <p style={{ color: '#dc2626' }}>Error: {error}</p>
-
-  return (
-    <div style={{ maxWidth: 440 }}>
-      <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>
-        Mostrando {startIndex + 1}–{endIndex} de {users?.length ?? 0} usuarios
+    <div style={{ fontFamily: 'sans-serif', maxWidth: 540, margin: '0 auto', padding: 24 }}>
+      <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>SearchWithFetch</h2>
+      <p style={{ color: '#666', fontSize: 14, marginBottom: 20 }}>
+        <code>useCallback</code> estabiliza la función de fetch en las deps de <code>useEffect</code>.
       </p>
 
-      <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
-        {pageItems.map(user => (
-          <li
-            key={user.id}
-            style={{ padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: 8 }}
-          >
-            <p style={{ margin: 0, fontWeight: 600, fontSize: 14 }}>{user.name}</p>
-            <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>{user.email}</p>
-          </li>
-        ))}
-      </ul>
-
-      {/* Controles de paginación con números */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <button onClick={prevPage} disabled={!canGoPrev} style={pgBtn(!canGoPrev)}>
-          ← Ant.
-        </button>
-
-        {Array.from({ length: totalPages }, (_, i) => i + 1).map(n => (
-          <button
-            key={n}
-            onClick={() => goToPage(n)}
-            style={{
-              ...pgBtn(false),
-              background:  n === currentPage ? '#0070f3' : '#fff',
-              color:       n === currentPage ? '#fff'    : '#374151',
-              borderColor: n === currentPage ? '#0070f3' : '#d1d5db',
-              fontWeight:  n === currentPage ? 600 : 400,
-            }}
-          >
-            {n}
-          </button>
-        ))}
-
-        <button onClick={nextPage} disabled={!canGoNext} style={pgBtn(!canGoNext)}>
-          Sig. →
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function pgBtn(disabled: boolean): React.CSSProperties {
-  return {
-    padding: '6px 12px', borderRadius: 6,
-    border: '1px solid #d1d5db',
-    background: '#fff',
-    color:   disabled ? '#9ca3af' : '#374151',
-    cursor:  disabled ? 'not-allowed' : 'pointer',
-    fontSize: 13,
-  }
-}
-```
-
-### Prueba esto
-
-- Cambia `PAGE_SIZE` de `3` a `1` — observa que ahora cada página muestra un solo usuario y el número total de páginas aumenta a 10
-- Cambia `PAGE_SIZE` a `10` — verifica que con 10 usuarios todos caben en una sola página y los botones de paginación quedan desactivados
-- Haz clic en un número de página directamente (por ejemplo "3") — confirma que `goToPage(3)` salta directamente sin pasar por las páginas intermedias
-- Haz clic en "← Ant." cuando estás en la primera página — observa que el botón está desactivado y `canGoPrev` es `false`
-- Pasa `totalItems: 0` al hook — verifica que `totalPages` devuelve `1` (no `0`) gracias a `Math.max(1, ...)` y no aparecen páginas negativas
-- Conecta `usePagination` con un array local de strings en lugar de datos del servidor — confirma que el hook es agnóstico al origen de los datos y funciona igual
-
----
-
-## 5. Cliente `axios` con interceptores
-
-### Instalación
-
-```bash
-npm install axios
-```
-
-### `src/api/axiosClient.ts`
-
-```ts
-// src/api/axiosClient.ts
-
-import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
-import type { Post, User } from '../types'
-
-// Instancia centralizada — configuración compartida por todos los endpoints
-const api: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? 'https://jsonplaceholder.typicode.com',
-  timeout: 8000,
-  headers: { 'Content-Type': 'application/json' },
-})
-
-// Interceptor de request — añade el token de auth en cada llamada
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
-})
-
-// Interceptor de response — manejo centralizado de errores HTTP
-api.interceptors.response.use(
-  (response: AxiosResponse) => response,
-  (error: unknown) => {
-    if (axios.isAxiosError(error)) {
-      const status = error.response?.status
-
-      if (status === 401) {
-        // Token expirado — redirigir al login
-        localStorage.removeItem('token')
-        window.location.href = '/login'
-      }
-      if (status === 404) console.warn('Recurso no encontrado')
-      if (status === 500) console.warn('Error interno del servidor')
-
-      // Lanza un error con el mensaje del servidor si existe
-      throw new Error(
-        (error.response?.data as { message?: string })?.message
-        ?? error.message
-      )
-    }
-    throw error
-  }
-)
-
-// Endpoints tipados — el genérico en get<T>/post<T> tipará r.data automáticamente
-export const axiosApi = {
-  getPosts:   () =>
-    api.get<Post[]>('/posts?_limit=10').then(r => r.data),
-  getPost:    (id: number) =>
-    api.get<Post>(`/posts/${id}`).then(r => r.data),
-  getUsers:   () =>
-    api.get<User[]>('/users').then(r => r.data),
-  createPost: (data: Omit<Post, 'id'>) =>
-    api.post<Post>('/posts', data).then(r => r.data),
-  updatePost: (id: number, data: Partial<Omit<Post, 'id'>>) =>
-    api.patch<Post>(`/posts/${id}`, data).then(r => r.data),
-  deletePost: (id: number) =>
-    api.delete<void>(`/posts/${id}`).then(r => r.data),
-}
-
-export default api
-```
-
-### Prueba esto
-
-- Guarda `'fake-token-123'` en `localStorage.setItem('token', 'fake-token-123')` desde la consola del navegador, recarga y realiza cualquier llamada — observa en la pestaña Network de DevTools que la cabecera `Authorization: Bearer fake-token-123` aparece en la petición
-- Cambia `timeout: 8000` a `timeout: 1` (1 ms) — observa que casi todas las peticiones fallan con un error de timeout de axios
-- Modifica el interceptor de respuesta para que haga `console.log(error.response?.status)` antes de lanzar — verifica que el código de estado HTTP aparece en la consola para cualquier error 4xx/5xx
-- Cambia `baseURL` para apuntar a un servidor que devuelva un `401` — observa que el interceptor llama a `localStorage.removeItem('token')` y redirige a `/login`
-- Añade `console.log('request:', config.url)` en el interceptor de request — observa en la consola que cada llamada a `axiosApi.*` registra su URL antes de ser enviada
-
----
-
-## 6. CRUD completo con `axios`
-
-### `src/components/PostCrudWithAxios.tsx`
-
-```tsx
-// src/components/PostCrudWithAxios.tsx
-
-import { useState, useEffect } from 'react'
-import { axiosApi }             from '../api/axiosClient'
-
-interface Post {
-  id:     number
-  title:  string
-  body:   string
-  userId: number
-}
-
-export default function PostCrudWithAxios() {
-  const [posts,   setPosts]   = useState<Post[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState<string | null>(null)
-  const [title,   setTitle]   = useState('')
-  const [saving,  setSaving]  = useState(false)
-
-  // Carga inicial
-  useEffect(() => {
-    axiosApi.getPosts()
-      .then(data => { setPosts(data); setLoading(false) })
-      .catch(err  => { setError(err instanceof Error ? err.message : 'Error'); setLoading(false) })
-  }, [])
-
-  // Crear
-  async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    if (!title.trim()) return
-    setSaving(true)
-    try {
-      const newPost = await axiosApi.createPost({ title: title.trim(), body: '', userId: 1 })
-      setPosts(prev => [newPost, ...prev])   // añade al principio de la lista
-      setTitle('')
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al crear')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  // Eliminar
-  async function handleDelete(id: number) {
-    try {
-      await axiosApi.deletePost(id)
-      setPosts(prev => prev.filter(p => p.id !== id))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al eliminar')
-    }
-  }
-
-  if (loading) return <p style={{ color: '#6b7280' }}>Cargando...</p>
-
-  return (
-    <div style={{ maxWidth: 440 }}>
-      {error && (
-        <p style={{ margin: '0 0 12px', fontSize: 13, color: '#dc2626' }}>{error}</p>
-      )}
-
-      {/* Formulario de creación */}
-      <form onSubmit={handleCreate} style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         <input
-          value={title}
-          onChange={e => setTitle(e.target.value)}
-          placeholder="Título del nuevo post..."
-          disabled={saving}
+          type="text"
+          placeholder="Buscar en títulos..."
+          value={query}
+          onChange={e => setQuery(e.target.value)}
           style={{
-            flex: 1, padding: '8px 12px',
-            border: '1px solid #d1d5db', borderRadius: 6, fontSize: 14,
+            flex:    1,
+            padding: '8px 12px',
+            border:  '1px solid #ccc',
+            borderRadius: 8,
+            fontSize: 14,
           }}
         />
         <button
-          type="submit"
-          disabled={saving || !title.trim()}
+          onClick={fetchPosts}
           style={{
-            padding: '8px 14px', background: '#0070f3', color: '#fff',
-            border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 500,
+            padding:      '8px 16px',
+            borderRadius: 8,
+            border:       '1px solid #0070f3',
+            background:   '#0070f3',
+            color:        'white',
+            cursor:       'pointer',
+            fontSize:     14,
           }}
         >
-          {saving ? '...' : 'Crear'}
+          Buscar
         </button>
-      </form>
-
-      {/* Lista con eliminación */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {posts.map(post => (
-          <div
-            key={post.id}
-            style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: 8,
-            }}
-          >
-            <p style={{ margin: 0, fontSize: 14, flex: 1 }}>{post.title}</p>
-            <button
-              onClick={() => handleDelete(post.id)}
-              style={{
-                marginLeft: 10, padding: '4px 8px',
-                background: '#fef2f2', color: '#dc2626',
-                border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12,
-              }}
-            >
-              ✕
-            </button>
-          </div>
-        ))}
       </div>
+
+      {error && (
+        <div style={{
+          padding:      12,
+          background:   '#fef2f2',
+          border:       '1px solid #fca5a5',
+          borderRadius: 8,
+          color:        '#dc2626',
+          fontSize:     14,
+          marginBottom: 16,
+        }}>
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 32, color: '#aaa' }}>Cargando…</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {posts.map(post => (
+            <div key={post.id} style={{
+              padding:      '12px 16px',
+              background:   '#f9f9f9',
+              borderRadius: 8,
+              border:       '1px solid #eee',
+            }}>
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
+                {post.title}
+              </div>
+              <div style={{ fontSize: 13, color: '#666', lineHeight: 1.5 }}>
+                {post.body.slice(0, 100)}…
+              </div>
+            </div>
+          ))}
+          {posts.length === 0 && !loading && (
+            <p style={{ textAlign: 'center', color: '#aaa' }}>Sin resultados.</p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -725,143 +350,446 @@ export default function PostCrudWithAxios() {
 
 ### Prueba esto
 
-- Escribe un título y haz clic en "Crear" — observa que el nuevo post aparece al principio de la lista de forma optimista (antes de que el servidor confirme) y el input se vacía
-- Deja el input vacío y haz clic en "Crear" — verifica que la función retorna sin hacer la petición gracias a `if (!title.trim()) return`
-- Haz clic en "✕" junto a cualquier post — observa que desaparece de la lista local instantáneamente (la API de jsonplaceholder simula la eliminación pero no persiste)
-- Crea un post y recarga la página — comprueba que el post creado desaparece, ya que `jsonplaceholder` no guarda los datos entre sesiones
-- Intenta crear un post mientras `saving` es `true` (haz doble clic muy rápido en "Crear") — verifica que el botón queda desactivado durante la petición y no se envían duplicados
-- Modifica `handleDelete` para que muestre un `window.confirm` antes de eliminar — observa que el flujo asíncrono funciona igual dentro del `try/catch`
+- Carga inicial — se llama `fetchPosts` automáticamente via `useEffect`
+- Escribe en el buscador — cada cambio en `query` recrea `fetchPosts`, `useEffect` lo detecta y lanza otra búsqueda
+- Haz clic en "Buscar" manualmente — llama a `fetchPosts()` directamente (la misma función estable)
+- Elimina `useCallback` y define `fetchPosts` como función normal — abre DevTools y observa peticiones en bucle
+- Cambia `_limit=5` a `_limit=10` en la URL — la próxima vez que `query` cambie traerá 10 resultados
 
 ---
 
-## Variables de entorno con Vite
+## Fase 3 — `src/components/FilterTable.tsx`
 
-En proyectos reales la URL de la API no va hardcodeada en el código.
-Vite expone variables de entorno con el prefijo `VITE_`:
+`useCallback` para handlers de fila en una tabla con React.memo.
+Múltiples callbacks tipados: editar, eliminar y cambiar estado.
 
-```bash
-# .env.development
-VITE_API_URL=https://api.desarrollo.com
+```tsx
+// src/components/FilterTable.tsx
 
-# .env.production
-VITE_API_URL=https://api.produccion.com
-```
+import { useState, useCallback, useMemo, memo } from 'react'
 
-```ts
-// Acceso desde el código
-const BASE = import.meta.env.VITE_API_URL
-
-// Con valor por defecto si la variable no existe
-const BASE = import.meta.env.VITE_API_URL ?? 'https://jsonplaceholder.typicode.com'
-```
-
-> El prefijo `VITE_` es obligatorio. Variables sin ese prefijo no son
-> accesibles desde el código del navegador — solo desde la configuración
-> de Vite en Node.js.
-
-Para que TypeScript conozca las variables de entorno personalizadas,
-añádelas en `src/vite-env.d.ts`:
-
-```ts
-// src/vite-env.d.ts
-
-/// <reference types="vite/client" />
-
-interface ImportMetaEnv {
-  readonly VITE_API_URL: string
-  // añade aquí todas tus variables VITE_*
+interface Employee {
+  id:         number
+  name:       string
+  department: string
+  salary:     number
+  active:     boolean
 }
 
-interface ImportMeta {
-  readonly env: ImportMetaEnv
+const EMPLOYEES: Employee[] = [
+  { id: 1, name: 'Ana García',    department: 'Diseño',       salary: 2800, active: true  },
+  { id: 2, name: 'Luis Pérez',    department: 'Ingeniería',   salary: 3500, active: true  },
+  { id: 3, name: 'María López',   department: 'Marketing',    salary: 2400, active: false },
+  { id: 4, name: 'Carlos Ruiz',   department: 'Ingeniería',   salary: 4000, active: true  },
+  { id: 5, name: 'Sofía Torres',  department: 'Diseño',       salary: 3100, active: true  },
+  { id: 6, name: 'Pedro Jiménez', department: 'Marketing',    salary: 2600, active: false },
+]
+
+// ─── Fila memoizada ──────────────────────────────────────────────────────
+const EmployeeRow = memo(function EmployeeRow({
+  emp,
+  onToggle,
+  onRaise,
+  onRemove,
+}: {
+  emp:      Employee
+  onToggle: (id: number) => void
+  onRaise:  (id: number, amount: number) => void
+  onRemove: (id: number) => void
+}) {
+  return (
+    <tr style={{ opacity: emp.active ? 1 : 0.5 }}>
+      <td style={{ padding: '8px 12px', fontWeight: 500 }}>{emp.name}</td>
+      <td style={{ padding: '8px 12px', color: '#666' }}>{emp.department}</td>
+      <td style={{ padding: '8px 12px', fontWeight: 700 }}>${emp.salary.toLocaleString()}</td>
+      <td style={{ padding: '8px 12px' }}>
+        <span style={{
+          padding:      '2px 10px',
+          borderRadius: 999,
+          fontSize:     12,
+          fontWeight:   600,
+          background:   emp.active ? '#dcfce7' : '#f3f4f6',
+          color:        emp.active ? '#15803d' : '#6b7280',
+        }}>
+          {emp.active ? 'Activo' : 'Inactivo'}
+        </span>
+      </td>
+      <td style={{ padding: '8px 12px' }}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            onClick={() => onToggle(emp.id)}
+            style={{
+              padding:      '3px 10px',
+              borderRadius: 4,
+              border:       '1px solid #d1d5db',
+              cursor:       'pointer',
+              fontSize:     12,
+              background:   'white',
+            }}
+          >
+            {emp.active ? 'Desactivar' : 'Activar'}
+          </button>
+          <button
+            onClick={() => onRaise(emp.id, 200)}
+            style={{
+              padding:    '3px 10px',
+              borderRadius: 4,
+              border:     '1px solid #86efac',
+              background: '#f0fdf4',
+              color:      '#15803d',
+              cursor:     'pointer',
+              fontSize:   12,
+            }}
+          >
+            +$200
+          </button>
+          <button
+            onClick={() => onRemove(emp.id)}
+            style={{
+              padding:    '3px 10px',
+              borderRadius: 4,
+              border:     '1px solid #fca5a5',
+              background: '#fef2f2',
+              color:      '#dc2626',
+              cursor:     'pointer',
+              fontSize:   12,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      </td>
+    </tr>
+  )
+})
+
+// ─── Padre ───────────────────────────────────────────────────────────────
+export default function FilterTable() {
+  const [employees,   setEmployees]   = useState<Employee[]>(EMPLOYEES)
+  const [deptFilter,  setDeptFilter]  = useState('Todos')
+  const [showInactive,setShowInactive]= useState(true)
+
+  const departments = useMemo(
+    () => ['Todos', ...new Set(EMPLOYEES.map(e => e.department))],
+    []
+  )
+
+  const visible = useMemo(
+    () => employees.filter(e =>
+      (deptFilter === 'Todos' || e.department === deptFilter) &&
+      (showInactive || e.active)
+    ),
+    [employees, deptFilter, showInactive]
+  )
+
+  // useCallback: handlers estables → EmployeeRow no re-renderiza por filtros
+  const handleToggle = useCallback((id: number) => {
+    setEmployees(prev => prev.map(e => e.id === id ? { ...e, active: !e.active } : e))
+  }, [])
+
+  const handleRaise = useCallback((id: number, amount: number) => {
+    setEmployees(prev => prev.map(e => e.id === id ? { ...e, salary: e.salary + amount } : e))
+  }, [])
+
+  const handleRemove = useCallback((id: number) => {
+    setEmployees(prev => prev.filter(e => e.id !== id))
+  }, [])
+
+  const totalSalary = useMemo(() => visible.reduce((s, e) => s + e.salary, 0), [visible])
+
+  return (
+    <div style={{ fontFamily: 'sans-serif', maxWidth: 700, margin: '0 auto', padding: 24 }}>
+      <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>FilterTable</h2>
+      <p style={{ color: '#666', fontSize: 14, marginBottom: 20 }}>
+        Tres callbacks estables para una tabla con <code>React.memo</code>. Cambiar filtros no re-renderiza las filas.
+      </p>
+
+      {/* Filtros */}
+      <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+        <select
+          value={deptFilter}
+          onChange={e => setDeptFilter(e.target.value)}
+          style={{ padding: '6px 10px', border: '1px solid #ccc', borderRadius: 6 }}
+        >
+          {departments.map(d => <option key={d}>{d}</option>)}
+        </select>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={showInactive}
+            onChange={e => setShowInactive(e.target.checked)}
+          />
+          Mostrar inactivos
+        </label>
+        <span style={{ fontSize: 13, color: '#888', alignSelf: 'center' }}>
+          {visible.length} empleado{visible.length !== 1 ? 's' : ''} · Salario total: ${totalSalary.toLocaleString()}
+        </span>
+      </div>
+
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <thead>
+          <tr style={{ background: '#f5f5f5' }}>
+            {['Nombre', 'Depto.', 'Salario', 'Estado', 'Acciones'].map(h => (
+              <th key={h} style={{
+                textAlign:    'left',
+                padding:      '8px 12px',
+                borderBottom: '2px solid #e5e5e5',
+                fontWeight:   600,
+                color:        '#555',
+              }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {visible.map(emp => (
+            <EmployeeRow
+              key={emp.id}
+              emp={emp}
+              onToggle={handleToggle}
+              onRaise={handleRaise}
+              onRemove={handleRemove}
+            />
+          ))}
+          {visible.length === 0 && (
+            <tr>
+              <td colSpan={5} style={{ padding: 24, textAlign: 'center', color: '#aaa' }}>
+                Sin empleados para los filtros actuales.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  )
 }
 ```
+
+### Prueba esto
+
+- Cambia el filtro de departamento — las filas visibles cambian pero las filas existentes **no re-renderizan** (observa en DevTools Profiler)
+- Haz clic en "+$200" de un empleado — solo esa fila actualiza su salario y re-renderiza
+- Haz clic en "Desactivar" — la fila cambia de opacidad y texto, las demás no re-renderizan
+- Desmarca "Mostrar inactivos" — las filas inactivas desaparecen sin re-renderizar las activas
+- Nota que los tres handlers usan `setEmployees` en forma funcional — no necesitan al propio `employees` en sus deps
 
 ---
 
-## `src/App.tsx`
+## Fase 4 — `src/components/PaginatedFetch.tsx`
+
+`useCallback` para una función de fetch con múltiples parámetros.
+Al cambiar de página, el callback se recrea con los nuevos parámetros.
+
+```tsx
+// src/components/PaginatedFetch.tsx
+
+import { useState, useCallback, useEffect } from 'react'
+
+interface User {
+  id:       number
+  name:     string
+  email:    string
+  username: string
+}
+
+const PAGE_SIZE = 5
+
+export default function PaginatedFetch() {
+  const [page,    setPage]    = useState(1)
+  const [users,   setUsers]   = useState<User[]>([])
+  const [total,   setTotal]   = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  // useCallback: fetchPage se recrea solo cuando `page` cambia
+  const fetchPage = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      // JSONPlaceholder: _start y _limit para paginación
+      const start = (page - 1) * PAGE_SIZE
+      const res   = await fetch(
+        `https://jsonplaceholder.typicode.com/users?_start=${start}&_limit=${PAGE_SIZE}`
+      )
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      // El total viene en el header X-Total-Count
+      const totalCount = Number(res.headers.get('x-total-count') ?? 10)
+      const data: User[] = await res.json()
+      setUsers(data)
+      setTotal(totalCount)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error')
+    } finally {
+      setLoading(false)
+    }
+  }, [page]) // ← nueva función solo cuando page cambia
+
+  useEffect(() => { fetchPage() }, [fetchPage])
+
+  const totalPages = Math.ceil(total / PAGE_SIZE) || 1
+
+  return (
+    <div style={{ fontFamily: 'sans-serif', maxWidth: 540, margin: '0 auto', padding: 24 }}>
+      <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>PaginatedFetch</h2>
+      <p style={{ color: '#666', fontSize: 14, marginBottom: 20 }}>
+        <code>useCallback</code> con <code>[page]</code> como dep — fetch al cambiar de página.
+      </p>
+
+      {error && (
+        <div style={{
+          padding:    12,
+          background: '#fef2f2',
+          border:     '1px solid #fca5a5',
+          borderRadius: 8,
+          color:      '#dc2626',
+          marginBottom: 16,
+          fontSize:   14,
+        }}>
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 32, color: '#aaa' }}>Cargando…</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+          {users.map(u => (
+            <div key={u.id} style={{
+              display:        'flex',
+              justifyContent: 'space-between',
+              alignItems:     'center',
+              padding:        '10px 14px',
+              background:     '#f9f9f9',
+              borderRadius:   8,
+              border:         '1px solid #eee',
+            }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>{u.name}</div>
+                <div style={{ fontSize: 12, color: '#888' }}>@{u.username}</div>
+              </div>
+              <div style={{ fontSize: 13, color: '#555' }}>{u.email}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Paginación */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
+        <button
+          onClick={() => setPage(1)}
+          disabled={page === 1 || loading}
+          style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #ddd', cursor: 'pointer' }}
+        >«</button>
+        <button
+          onClick={() => setPage(p => Math.max(1, p - 1))}
+          disabled={page === 1 || loading}
+          style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #ddd', cursor: 'pointer' }}
+        >‹</button>
+
+        {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+          <button
+            key={p}
+            onClick={() => setPage(p)}
+            disabled={loading}
+            style={{
+              padding:    '5px 12px',
+              borderRadius: 6,
+              border:     '1px solid',
+              borderColor: p === page ? '#0070f3' : '#ddd',
+              background:  p === page ? '#0070f3' : 'white',
+              color:       p === page ? 'white'    : '#333',
+              cursor:      'pointer',
+              fontWeight:  p === page ? 700 : 400,
+            }}
+          >
+            {p}
+          </button>
+        ))}
+
+        <button
+          onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+          disabled={page === totalPages || loading}
+          style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #ddd', cursor: 'pointer' }}
+        >›</button>
+        <button
+          onClick={() => setPage(totalPages)}
+          disabled={page === totalPages || loading}
+          style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #ddd', cursor: 'pointer' }}
+        >»</button>
+      </div>
+
+      <p style={{ textAlign: 'center', fontSize: 12, color: '#aaa', marginTop: 10 }}>
+        Página {page} de {totalPages} · {total} usuarios en total
+      </p>
+    </div>
+  )
+}
+```
+
+### Prueba esto
+
+- Haz clic en los botones de paginación — `page` cambia → `fetchPage` se recrea → `useEffect` lo detecta → nueva petición
+- Abre DevTools → Network — cada cambio de página genera exactamente una petición `GET /users?_start=N&_limit=5`
+- Haz clic en el mismo número de página dos veces — la segunda vez `page` no cambia → `fetchPage` es el mismo → sin petición extra
+- Elimina `[page]` de las deps de `useCallback` (deja `[]`) — la paginación deja de funcionar: `fetchPage` siempre usa `page = 1`
+- Añade un campo de búsqueda con su propio estado y agrégalo a las deps: `useCallback(async () => { ... }, [page, search])`
+
+---
+
+## Navegador de pasos — `App.tsx`
 
 ```tsx
 // src/App.tsx
 
-import PostListBasic       from './components/PostListBasic'
-import UserListWithRefetch from './components/UserListWithRefetch'
-import PaginatedUserList   from './components/PaginatedUserList'
-import PostCrudWithAxios   from './components/PostCrudWithAxios'
+import MemoizedList    from './components/MemoizedList'
+import SearchWithFetch from './components/SearchWithFetch'
+import FilterTable     from './components/FilterTable'
+import PaginatedFetch  from './components/PaginatedFetch'
 
 // ┌──────────────────────────────────────────────────────────────────────┐
 // │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
-// │  1  PostListBasic       — fetch directo en useEffect                │
-// │  2  UserListWithRefetch — useFetchData con refetch manual           │
-// │  3  PaginatedUserList   — paginación con usePagination              │
-// │  4  PostCrudWithAxios   — CRUD completo con axios                   │
+// │  1  MemoizedList    — useCallback + React.memo: evita re-renders    │
+// │  2  SearchWithFetch — useCallback en deps de useEffect (sin bucle)  │
+// │  3  FilterTable     — tres callbacks estables, tabla memoizada      │
+// │  4  PaginatedFetch  — useCallback con [page] para paginación        │
 // └──────────────────────────────────────────────────────────────────────┘
 const PASO = 1
 
 export default function App() {
   const content =
-    PASO === 1 ? <PostListBasic /> :
-    PASO === 2 ? <UserListWithRefetch /> :
-    PASO === 3 ? <PaginatedUserList /> :
-    PASO === 4 ? <PostCrudWithAxios /> :
+    PASO === 1 ? <MemoizedList /> :
+    PASO === 2 ? <SearchWithFetch /> :
+    PASO === 3 ? <FilterTable /> :
+    PASO === 4 ? <PaginatedFetch /> :
     <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
 
   return (
-    <main style={{ maxWidth: 600, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
+    <main style={{ maxWidth: 720, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
       {content}
     </main>
   )
 }
 ```
 
----
+### Prueba esto
 
-## Cuándo usar qué
-
-| Situación | Herramienta recomendada |
-|---|---|
-| Aprendiendo, proyecto pequeño | `fetch` directo en `useEffect` |
-| Varios componentes que fetchen la misma URL | `useFetchData` con caché manual |
-| App con auth, tokens e interceptores | `axios` con cliente centralizado |
-| App con muchos endpoints y caché inteligente | TanStack Query (página 14) |
+- Cambia `PASO = 1` — pulsa el counter y observa que las filas memoizadas no re-renderizan
+- Cambia a `PASO = 2` — busca posts; comenta `useCallback` para ver el bucle de peticiones
+- Cambia a `PASO = 3` — filtra la tabla y verifica con DevTools Profiler que las filas no se actualizan al filtrar
+- Cambia a `PASO = 4` — navega entre páginas y observa en Network las peticiones paginadas
 
 ---
 
-## Ejercicios propuestos
+## Resumen de la página 10
 
-1. **Tabla de usuarios con búsqueda** — usa `useFetchData` para cargar usuarios
-   y filtra el array en memoria con un input de texto. Sin llamadas al servidor
-   por cada letra.
-
-2. **Botón de recarga con timestamp** — modifica `UserListWithRefetch` para que
-   muestre la hora de la última carga junto al botón de refetch.
-
-3. **Paginación con URL** — combina `usePagination` con `useSearchParams` de
-   React Router para que la página actual se guarde en `?page=2`. Al recargar
-   el navegador, la paginación debe restaurarse.
-
-4. **Manejo de timeout** — modifica `useFetchData` para aceptar un parámetro
-   `timeoutMs` y usar `AbortController` + `setTimeout` para cancelar la petición
-   si tarda demasiado.
-
-5. **Cliente axios con reintentos** — añade un interceptor de respuesta que reintente
-   automáticamente las peticiones fallidas hasta 3 veces con un delay de 1 segundo
-   entre cada intento.
+- `useCallback` memoriza la referencia de una función; solo la recrea cuando cambian sus dependencias.
+- En JavaScript, funciones con el mismo código tienen referencias distintas — `() => {} === () => {}` es `false`.
+- `React.memo` compara props con `===`; una función nueva en cada render siempre activa el re-render del hijo.
+- Si una función entra en el array de deps de `useEffect` sin `useCallback`, se genera un bucle infinito.
+- Los handlers que usan `setState` en forma funcional (`setState(prev => ...)`) generalmente no necesitan deps.
+- Usa la forma funcional del setter para evitar capturar estado stale: `setList(prev => [...prev, item])`.
+- `useCallback` sin beneficio añade complejidad — úsalo solo cuando la función sale del componente.
 
 ---
 
-## Resumen de la página 9B
-
-- `fetch` no lanza errores en respuestas 4xx/5xx — siempre verificar `res.ok`.
-- `axios` lanza automáticamente, parsea JSON y permite interceptores globales.
-- Un cliente centralizado (`fetchClient.ts` o `axiosClient.ts`) evita repetir URL base, headers y manejo de errores en cada componente.
-- `useFetchData` con `trigger` + `useCallback` implementa `refetch` sin cambiar la URL.
-- `usePagination` separa la lógica de navegación del fetching — funciona con cualquier array.
-- Los interceptores de `axios` son el lugar correcto para manejar tokens de autenticación y errores HTTP globales.
-- Las variables de entorno en Vite van en `.env.*` con prefijo `VITE_` y se acceden con `import.meta.env.VITE_*`.
-- Para proyectos con múltiples endpoints y necesidad de caché, TanStack Query (página 14) reemplaza `useFetchData` con ventajas significativas.
-
----
-
-> Esta página se ubica entre la página 9 (hooks personalizados)
-> y la página 10 (React Router), como complemento antes de la arquitectura.
+> **Siguiente página →** Página 11: hooks personalizados (`useLocalStorage`, `useFetch`, `useDebounce`…).
+> **Páginas anteriores →** Página 9: `useMemo` · Página 6: intro a `useRef`, `useCallback`, `useMemo`.

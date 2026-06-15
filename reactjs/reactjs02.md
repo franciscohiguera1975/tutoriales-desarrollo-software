@@ -1199,6 +1199,21 @@ export default function SimpleInfoTable({ title, rows }: SimpleInfoTableProps) {
 
 ```tsx
 // src/App.tsx
+
+import WelcomeBanner       from './components/WelcomeBanner'
+import UserGreeting        from './components/UserGreeting'
+import CurrentDateDisplay  from './components/CurrentDateDisplay'
+import ColoredBox          from './components/ColoredBox'
+import ConditionalGreeting from './components/ConditionalGreeting'
+import FruitList           from './components/FruitList'
+import PriceTag            from './components/PriceTag'
+import StatusBadge         from './components/StatusBadge'
+import MiniProfileCard     from './components/MiniProfileCard'
+import SimpleInfoTable     from './components/SimpleInfoTable'
+import ProductCard         from './components/ProductCard'
+import ProductCatalogList  from './components/ProductCatalogList'
+import UserProfileCard     from './components/UserProfileCard'
+
 // ┌──────────────────────────────────────────────────────────────────────────┐
 // │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.          │
 // │   1  WelcomeBanner       — banner estático sin props                    │
@@ -1216,20 +1231,6 @@ export default function SimpleInfoTable({ title, rows }: SimpleInfoTableProps) {
 // │  13  UserProfileCard     — ejercicio: props complejas + rol             │
 // └──────────────────────────────────────────────────────────────────────────┘
 const PASO = 1
-
-import WelcomeBanner       from './components/WelcomeBanner'
-import UserGreeting        from './components/UserGreeting'
-import CurrentDateDisplay  from './components/CurrentDateDisplay'
-import ColoredBox          from './components/ColoredBox'
-import ConditionalGreeting from './components/ConditionalGreeting'
-import FruitList           from './components/FruitList'
-import PriceTag            from './components/PriceTag'
-import StatusBadge         from './components/StatusBadge'
-import MiniProfileCard     from './components/MiniProfileCard'
-import SimpleInfoTable     from './components/SimpleInfoTable'
-import ProductCard         from './components/ProductCard'
-import ProductCatalogList  from './components/ProductCatalogList'
-import UserProfileCard     from './components/UserProfileCard'
 
 const fruits = [
   { name: 'Manzana', emoji: '🍎', calories: 52 },

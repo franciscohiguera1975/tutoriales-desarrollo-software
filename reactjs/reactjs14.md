@@ -1,744 +1,709 @@
-# Curso React.js + TypeScript — Página 13
-## Módulo 6 · Ecosistema
-### Testing con Vitest y React Testing Library
+# Curso React.js + TypeScript — Página 11
+## Módulo 5 · Arquitectura
+### Rendimiento: `React.memo`, patrones de optimización y code splitting
 
 ---
 
-## ¿Por qué testear componentes React?
+## ¿Cuándo re-renderiza React?
 
-Los tests verifican que tus componentes se comportan como el usuario
-espera — no cómo están implementados internamente. React Testing Library
-(RTL) impone esta filosofía: **testea lo que el usuario ve y hace**,
-no los detalles del estado o las props.
+Un componente se re-renderiza cuando:
+
+1. **Su propio estado cambia** — `useState` o `useReducer`
+2. **Sus props cambian** — cualquier prop, por comparación de referencia
+3. **Su contexto cambia** — cualquier valor del contexto que consume
+4. **Su padre se re-renderiza** — aunque las props no hayan cambiado
+
+El punto 4 es el más sorprendente: **por defecto, si el padre re-renderiza,
+todos los hijos re-renderizan**, aunque sus props sean idénticas.
 
 ```
-Tests de implementación (evitar)     Tests de comportamiento (preferir)
-─────────────────────────────        ─────────────────────────────────
-¿El estado es { count: 1 }?          ¿La pantalla muestra "Cuenta: 1"?
-¿Se llamó a setState?                 ¿El botón existe y es clickeable?
-¿La función interna se ejecutó?       ¿Se mostró el mensaje de error?
+App (re-renderiza porque su estado cambió)
+ ├── Header     ← re-renderiza aunque no tenga props del App
+ ├── Sidebar    ← re-renderiza aunque no tenga props del App
+ └── MainContent ← re-renderiza aunque no tenga props del App
+      └── ProductList ← re-renderiza
+           └── ProductRow × 100 ← 100 re-renders innecesarios
 ```
+
+`React.memo` corta esta cadena.
 
 ---
 
-## Instalación y configuración
+## `React.memo`
 
-```bash
-npm install -D vitest @vitest/ui jsdom \
-  @testing-library/react \
-  @testing-library/jest-dom \
-  @testing-library/user-event
-```
+`React.memo` envuelve un componente y le indica a React que **solo lo
+re-renderice si sus props cambiaron**. Usa comparación superficial por defecto:
+compara cada prop con `===`.
 
-### Versiones actuales
+```tsx
+import { memo } from 'react'
 
-| Librería | Versión |
-|---|---|
-| `vitest` | ^4.1.0 |
-| `@testing-library/react` | ^16.3.2 |
-| `@testing-library/jest-dom` | ^6.9.1 |
-| `@testing-library/user-event` | ^14.6.1 |
-| `jsdom` | ^29.0.0 |
+// Sin memo — re-renderiza siempre que el padre re-renderice
+function UserCard({ name, email }: UserCardProps) {
+  return <div>{name} — {email}</div>
+}
 
----
-
-### `vite.config.ts` — añadir configuración de test
-
-```ts
-// vite.config.ts
-
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-
-export default defineConfig({
-  plugins: [react()],
-  test: {
-    environment: 'jsdom',      // simula el DOM del navegador
-    globals:     true,         // describe, it, expect disponibles sin import
-    setupFiles:  ['./src/test/setup.ts'],
-  },
+// Con memo — solo re-renderiza si name o email cambian
+const UserCard = memo(function UserCard({ name, email }: UserCardProps) {
+  return <div>{name} — {email}</div>
 })
 ```
 
-### `src/test/setup.ts`
+### La trampa de las funciones como props
 
-```ts
-// src/test/setup.ts
+`React.memo` compara props con `===`. Las funciones son objetos — dos
+funciones con el mismo código son referencias distintas:
 
-import '@testing-library/jest-dom'
-// Extiende los matchers de Vitest con los de jest-dom:
-// toBeInTheDocument, toHaveTextContent, toBeVisible, etc.
-```
+```tsx
+function App() {
+  // Esta función se recrea en cada render de App
+  function handleEdit() { console.log('edit') }
 
-### `tsconfig.app.json` — añadir tipos de Vitest
-
-```json
-{
-  "compilerOptions": {
-    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"]
-  }
+  // Aunque UserCard tenga memo, re-renderiza porque
+  // handleEdit es una nueva referencia en cada render
+  return <UserCard onEdit={handleEdit} />
 }
 ```
 
-### Scripts en `package.json`
+La solución: `useCallback` para estabilizar la referencia.
 
-```json
-{
-  "scripts": {
-    "test":       "vitest",
-    "test:run":   "vitest run",
-    "test:ui":    "vitest --ui",
-    "test:cover": "vitest run --coverage"
+---
+
+## `src/components/UserCard.tsx`
+
+```tsx
+// src/components/UserCard.tsx
+
+import { memo } from 'react'
+
+interface UserCardProps {
+  name:    string
+  email:   string
+  role:    'admin' | 'editor' | 'viewer'
+  onEdit:  () => void
+}
+
+// memo — solo re-renderiza si alguna prop cambia (comparación ===)
+const UserCard = memo(function UserCard({
+  name,
+  email,
+  role,
+  onEdit,
+}: UserCardProps) {
+  return (
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      padding: '12px 16px', border: '1px solid #e5e7eb', borderRadius: 8,
+    }}>
+      <div>
+        <p style={{ margin: 0, fontWeight: 600 }}>{name}</p>
+        <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>{email}</p>
+        <span style={{
+          fontSize: 11, padding: '2px 8px', borderRadius: 10,
+          background: role === 'admin' ? '#eff6ff' : '#f9fafb',
+          color:      role === 'admin' ? '#1d4ed8' : '#6b7280',
+          fontWeight: 600,
+        }}>
+          {role}
+        </span>
+      </div>
+      <button
+        onClick={onEdit}
+        style={{
+          padding: '6px 14px', border: '1px solid #d1d5db',
+          borderRadius: 6, background: '#fff', cursor: 'pointer',
+        }}
+      >
+        Editar
+      </button>
+    </div>
+  )
+})
+
+export default UserCard
+```
+
+### Prueba esto
+
+- Cambia `memo(function UserCard(...))` por `function UserCard(...)` (sin memo), añade `console.log('render UserCard')` dentro y haz clic repetidamente en el botón del padre — observa que `UserCard` se re-renderiza en cada clic aunque sus props no hayan cambiado
+- Vuelve a añadir `memo` pero pasa `onEdit` como función anónima `onEdit={() => console.log('edit')}` en el padre — observa en la consola que `UserCard` sigue re-renderizando porque cada render del padre crea una función nueva
+- Envuelve `onEdit` con `useCallback(() => console.log('edit'), [])` en el padre y confirma que el log de render de `UserCard` ya no aparece al hacer clic en el botón del padre
+- Cambia el `role` de `"admin"` a `"viewer"` en las props — observa que `UserCard` sí se re-renderiza porque la prop `role` realmente cambió, que es el comportamiento correcto de `memo`
+- Abre React DevTools, activa "Highlight updates when components render" y haz clic en el botón del padre — con `memo` + `useCallback`, `UserCard` no se resalta; sin ellos, sí
+
+---
+
+## El trío: `memo` + `useCallback` + `useMemo`
+
+Los tres trabajan juntos. Sin `useCallback`, `memo` no sirve de nada
+cuando se pasan funciones como props.
+
+```
+memo       → evita que el hijo re-renderice por props iguales
+useCallback → estabiliza funciones pasadas como props
+useMemo     → estabiliza objetos/arrays calculados pasados como props
+```
+
+---
+
+## `src/components/ProductTable.tsx`
+
+Patrón completo: lista con `memo` en cada fila, `useCallback` en los
+handlers y `useMemo` para el array filtrado.
+
+```tsx
+// src/components/ProductTable.tsx
+
+import { useState, useCallback, useMemo, memo } from 'react'
+
+interface Product {
+  id:       number
+  name:     string
+  price:    number
+  category: string
+}
+
+interface ProductRowProps {
+  product:  Product
+  onDelete: (id: number) => void
+  onEdit:   (product: Product) => void
+}
+
+// memo — solo re-renderiza si product, onDelete u onEdit cambian
+const ProductRow = memo(function ProductRow({
+  product,
+  onDelete,
+  onEdit,
+}: ProductRowProps) {
+  return (
+    <tr>
+      <td style={{ padding: '10px 12px' }}>{product.name}</td>
+      <td style={{ padding: '10px 12px', color: '#6b7280' }}>{product.category}</td>
+      <td style={{ padding: '10px 12px', fontWeight: 600 }}>${product.price}</td>
+      <td style={{ padding: '10px 12px' }}>
+        <button
+          onClick={() => onEdit(product)}
+          style={actionBtn('#eff6ff', '#1d4ed8')}
+        >
+          Editar
+        </button>
+        <button
+          onClick={() => onDelete(product.id)}
+          style={actionBtn('#fef2f2', '#dc2626')}
+        >
+          Eliminar
+        </button>
+      </td>
+    </tr>
+  )
+})
+
+const INITIAL_PRODUCTS: Product[] = [
+  { id: 1, name: 'Teclado mecánico',  price: 89,  category: 'Periféricos' },
+  { id: 2, name: 'Monitor 27"',       price: 349, category: 'Pantallas'   },
+  { id: 3, name: 'Mouse inalámbrico', price: 29,  category: 'Periféricos' },
+  { id: 4, name: 'Webcam HD',         price: 59,  category: 'Cámaras'     },
+  { id: 5, name: 'Auriculares BT',    price: 149, category: 'Audio'       },
+]
+
+export default function ProductTable() {
+  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS)
+  const [filter,   setFilter]   = useState('')
+
+  // useCallback — handleDelete mantiene la misma referencia
+  // mientras products no cambie desde fuera
+  const handleDelete = useCallback((id: number) => {
+    setProducts((prev) => prev.filter((p) => p.id !== id))
+  }, [])
+
+  // useCallback con dependencias vacías — onEdit no depende del estado
+  const handleEdit = useCallback((product: Product) => {
+    console.log('Editando producto:', product.name)
+    // aquí abriría un modal, navegaría, etc.
+  }, [])
+
+  // useMemo — filtered solo recalcula cuando products o filter cambian
+  const filtered = useMemo(
+    () => products.filter((p) =>
+      p.name.toLowerCase().includes(filter.toLowerCase()) ||
+      p.category.toLowerCase().includes(filter.toLowerCase())
+    ),
+    [products, filter]
+  )
+
+  const totalValue = useMemo(
+    () => filtered.reduce((acc, p) => acc + p.price, 0),
+    [filtered]
+  )
+
+  return (
+    <div style={{ maxWidth: 560 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+        <input
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Filtrar productos..."
+          style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6, flex: 1 }}
+        />
+        <span style={{ alignSelf: 'center', marginLeft: 16, fontSize: 14, color: '#6b7280' }}>
+          Total: <strong>${totalValue}</strong>
+        </span>
+      </div>
+
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+        <thead>
+          <tr style={{ background: '#f9fafb' }}>
+            {['Nombre', 'Categoría', 'Precio', 'Acciones'].map((h) => (
+              <th
+                key={h}
+                style={{
+                  padding: '8px 12px', textAlign: 'left',
+                  fontWeight: 600, fontSize: 12,
+                  color: '#6b7280', borderBottom: '1px solid #e5e7eb',
+                }}
+              >
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.map((product) => (
+            <ProductRow
+              key={product.id}
+              product={product}
+              onDelete={handleDelete}
+              onEdit={handleEdit}
+            />
+          ))}
+        </tbody>
+      </table>
+
+      {filtered.length === 0 && (
+        <p style={{ textAlign: 'center', color: '#9ca3af', padding: 20 }}>
+          Sin resultados.
+        </p>
+      )}
+    </div>
+  )
+}
+
+function actionBtn(bg: string, color: string): React.CSSProperties {
+  return {
+    padding: '4px 10px', marginRight: 6,
+    border: 'none', borderRadius: 4,
+    background: bg, color, cursor: 'pointer',
+    fontSize: 12, fontWeight: 500,
   }
 }
 ```
 
 ### Prueba esto
 
-- Ejecuta `npm test` en la terminal — Vitest arranca en modo watch y muestra los resultados en tiempo real; cualquier cambio en los archivos relanza los tests automáticamente
-- Ejecuta `npm run test:ui` — se abre una interfaz visual en el navegador donde puedes ver el árbol de tests, filtrar por nombre y ver los errores con detalle
-- Cambia `globals: true` a `globals: false` en `vite.config.ts` — los tests fallan porque `describe`, `it` y `expect` ya no están disponibles sin importarlos explícitamente
-- Elimina temporalmente la línea `import '@testing-library/jest-dom'` de `setup.ts` — los matchers como `toBeInTheDocument` dejan de funcionar y TypeScript muestra errores de tipo
-- Ejecuta `npm run test:cover` — se genera un informe de cobertura que muestra qué líneas de código están cubiertas por tests y cuáles no
-- Añade `coverage: { reporter: ['text', 'html'] }` dentro de `test:` en `vite.config.ts` y vuelve a ejecutar `test:cover` — se genera una carpeta `coverage/` con un informe HTML navegable
+- Añade `console.log('render ProductRow', product.name)` dentro de `ProductRow` y escribe en el filtro — observa que solo se re-renderizan las filas cuyas props cambiaron, no todas
+- Quita `memo` de `ProductRow` y repite — observa en la consola que todas las filas se re-renderizan en cada pulsación de tecla aunque los datos de los productos no hayan cambiado
+- Cambia `useCallback` de `handleDelete` a una función normal `function handleDelete(id: number) { ... }` declarada dentro de `ProductTable` — observa que todas las filas con `memo` vuelven a re-renderizarse al escribir en el filtro porque `handleDelete` tiene una referencia nueva en cada render
+- Cambia las dependencias de `useMemo` para `filtered` de `[products, filter]` a `[]` — escribe en el filtro y observa que la lista nunca se actualiza porque `filtered` quedó congelado con el valor inicial
+- Elimina `<ProductRow key={product.id} ...>` y pon `key={product.name}` — renombra mentalmente un producto añadiendo un carácter al `name` y observa que React desmonta y vuelve a montar la fila en lugar de actualizarla
+- Haz clic en "Eliminar" en un producto — observa que el `totalValue` se recalcula automáticamente porque `filtered` es una dependencia de ese `useMemo`
 
 ---
 
-## Estructura de archivos
+## `React.memo` con comparador personalizado
 
-```
-src/
-├── components/
-│   ├── StatusBadge.tsx
-│   ├── Counter.tsx
-│   ├── SearchInput.tsx
-│   └── UserCard.tsx
-├── __tests__/                ← tests junto a src/
-│   ├── StatusBadge.test.tsx
-│   ├── Counter.test.tsx
-│   ├── SearchInput.test.tsx
-│   └── UserCard.test.tsx
-└── test/
-    └── setup.ts
-```
-
-> Convención alternativa: colocar el test junto al componente
-> (`StatusBadge.test.tsx` en la misma carpeta que `StatusBadge.tsx`).
-> Ambas son válidas — lo importante es ser consistente en todo el proyecto.
-
----
-
-## Componentes a testear
-
-Los componentes están diseñados con atributos de accesibilidad (`aria-label`,
-`role`, `data-testid`) que hacen los tests más robustos y descriptivos.
-
-### `src/components/StatusBadge.tsx`
+Por defecto `memo` hace comparación superficial con `===`. Para arrays
+u objetos complejos en props, esa comparación falla — dos arrays con el
+mismo contenido son referencias distintas. El segundo argumento de `memo`
+permite definir la comparación:
 
 ```tsx
-// src/components/StatusBadge.tsx
+// src/components/ExpensiveChart.tsx
 
-type BadgeStatus = 'active' | 'inactive' | 'pending'
+import { memo } from 'react'
 
-interface StatusBadgeProps {
-  status:  BadgeStatus
-  label?:  string
+interface ExpensiveChartProps {
+  data:   number[]
+  label:  string
+  color?: string
 }
 
-const config: Record<BadgeStatus, { bg: string; color: string; text: string }> = {
-  active:   { bg: '#dcfce7', color: '#166534', text: 'Activo'    },
-  inactive: { bg: '#f3f4f6', color: '#6b7280', text: 'Inactivo'  },
-  pending:  { bg: '#fef9c3', color: '#854d0e', text: 'Pendiente' },
+const ExpensiveChart = memo(
+  function ExpensiveChart({
+    data,
+    label,
+    color = '#0070f3',
+  }: ExpensiveChartProps) {
+    // cálculo costoso — simula una librería de gráficos pesada
+    const max = Math.max(...data)
+    const min = Math.min(...data)
+    const avg = data.reduce((a, b) => a + b, 0) / data.length
+
+    return (
+      <div style={{ padding: 16, border: '1px solid #e5e7eb', borderRadius: 8 }}>
+        <p style={{ margin: '0 0 8px', fontWeight: 600, color }}>{label}</p>
+        <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
+          <span>Mín: <strong>{min}</strong></span>
+          <span>Máx: <strong>{max}</strong></span>
+          <span>Prom: <strong>{avg.toFixed(1)}</strong></span>
+        </div>
+        {/* Barras simples */}
+        <div style={{ display: 'flex', gap: 4, marginTop: 12, alignItems: 'flex-end', height: 60 }}>
+          {data.map((v, i) => (
+            <div
+              key={i}
+              style={{
+                flex: 1,
+                height: `${(v / max) * 100}%`,
+                background: color,
+                borderRadius: '2px 2px 0 0',
+                opacity: 0.8,
+              }}
+            />
+          ))}
+        </div>
+      </div>
+    )
+  },
+  // Comparador personalizado — evita re-renders cuando el array
+  // tiene el mismo contenido aunque sea una referencia nueva
+  (prevProps, nextProps) =>
+    prevProps.label === nextProps.label &&
+    prevProps.color === nextProps.color &&
+    prevProps.data.length === nextProps.data.length &&
+    prevProps.data.every((v, i) => v === nextProps.data[i])
+)
+
+export default ExpensiveChart
+```
+
+> Usa el comparador personalizado con cuidado. Si devuelve `true`
+> (props iguales) cuando en realidad cambiaron, el componente mostrará
+> datos desactualizados. El comparador incorrecto es peor que no tener `memo`.
+
+### Prueba esto
+
+- Pasa `data={[42, 78, 35, 91, 63, 57, 84]}` como array literal en el JSX del padre (sin `useMemo`) — observa que el comparador personalizado evalúa `every` y evita el re-render aunque sea un array nuevo en cada render del padre
+- Quita el comparador personalizado (solo pasa un argumento a `memo`) y pasa el array como literal — observa que ahora `ExpensiveChart` se re-renderiza en cada render del padre porque `===` compara referencias y el array literal es nuevo cada vez
+- Modifica el comparador para que siempre devuelva `true` — cambia un valor en el `data` y observa que el gráfico no se actualiza aunque los datos hayan cambiado; este es el bug que produce un comparador incorrecto
+- Cambia `prevProps.data.length === nextProps.data.length` en el comparador por una comparación falsa como `prevProps.data.length !== nextProps.data.length` — observa que ahora el componente siempre re-renderiza aunque los datos sean iguales
+- Añade `console.log('render ExpensiveChart')` dentro del componente y provoca re-renders del padre — con el comparador correcto, el log no debe aparecer si los datos y el label son iguales
+
+---
+
+## Medir renders con `useRef`
+
+Antes de optimizar, verifica que el problema existe. Un contador de renders
+simple con `useRef` muestra cuántas veces se ejecuta cada componente:
+
+```tsx
+// src/components/RenderCounter.tsx
+// Solo para desarrollo — quita antes de producción
+
+import { useRef } from 'react'
+
+interface RenderCounterProps {
+  label: string
 }
 
-export default function StatusBadge({ status, label }: StatusBadgeProps) {
-  const { bg, color, text } = config[status]
+export default function RenderCounter({ label }: RenderCounterProps) {
+  const renderCount = useRef(0)
+  renderCount.current++
+
   return (
-    <span
-      data-testid="status-badge"
-      style={{ backgroundColor: bg, color, padding: '2px 8px', borderRadius: 10, fontSize: 12 }}
-    >
-      {label ?? text}
+    <span style={{
+      fontSize: 11, padding: '1px 6px',
+      background: renderCount.current > 3 ? '#fef2f2' : '#f0fdf4',
+      color:      renderCount.current > 3 ? '#dc2626' : '#16a34a',
+      borderRadius: 4, fontFamily: 'monospace',
+    }}>
+      {label}: {renderCount.current} renders
     </span>
   )
 }
 ```
 
+```tsx
+// Usar temporalmente en el componente que sospechas
+function ProductRow({ product, onDelete, onEdit }: ProductRowProps) {
+  return (
+    <tr>
+      <td><RenderCounter label="ProductRow" /></td>
+      <td>{product.name}</td>
+      ...
+    </tr>
+  )
+}
+```
+
 ### Prueba esto
 
-- Renderiza `<StatusBadge status="active" />` en `App.tsx` y observa el badge verde con el texto "Activo" — confirma que el componente funciona visualmente antes de escribir tests
-- Añade un cuarto valor `'error'` al tipo `BadgeStatus` sin actualizar el objeto `config` — TypeScript marca un error en tiempo de compilación porque `config[status]` puede ser `undefined`
-- Agrega `{ error: { bg: '#fef2f2', color: '#dc2626', text: 'Error' } }` a `config` — el nuevo estado queda disponible para los tests sin cambiar nada más en el componente
-- Cambia `data-testid="status-badge"` a `data-testid="badge"` — todos los tests que usen `getByTestId('status-badge')` fallarán; actualiza el testid en los tests para que vuelvan a pasar
-- Pasa `label="Conectado"` al componente — el texto "Conectado" reemplaza al texto por defecto "Activo" gracias al operador `??`
-- Elimina el atributo `data-testid` completamente del `span` — los tests que usen `getByTestId` fallan; como ejercicio, reescribe esos tests usando `getByText` en su lugar
+- Añade `<RenderCounter label="App" />` en `App` y `<RenderCounter label="UserCard" />` en `UserCard` — haz clic en el botón "Re-renderizar App" varias veces y observa que el contador de `App` sube pero el de `UserCard` se mantiene en 1 gracias a `memo`
+- Quita `memo` de `UserCard` temporalmente y observa cómo el contador de `UserCard` ahora sincroniza con el de `App`
+- Observa el cambio de color del badge: después de 3 renders pasa de verde a rojo — usa esto para identificar qué componentes están re-renderizando excesivamente
+- Añade `<RenderCounter label="ProductRow" />` dentro de `ProductRow` y escribe rápido en el filtro — observa cuántos renders se producen por pulsación de tecla con y sin `memo`
+- Comprueba que `renderCount.current++` no provoca re-renders adicionales — a diferencia de `useState`, actualizar un `ref` es silencioso para React
 
-### `src/components/Counter.tsx`
+---
+
+## Code splitting con `lazy` y `Suspense`
+
+`lazy` permite cargar un componente solo cuando se necesita —
+el bundle de ese componente se descarga en ese momento, no al inicio.
+
+En producción esto reduce el tamaño del bundle inicial significativamente.
 
 ```tsx
-// src/components/Counter.tsx
+// src/App.tsx — lazy loading de páginas completas
 
-import { useState } from 'react'
+import { lazy, Suspense } from 'react'
+import { Routes, Route }  from 'react-router-dom'
+import RootLayout         from './layouts/RootLayout'
 
-interface CounterProps {
-  initialValue?:  number
-  step?:          number
-  onCountChange?: (count: number) => void
-}
+// Las páginas se cargan solo cuando el usuario navega a esa ruta
+const HomePage          = lazy(() => import('./pages/HomePage'))
+const ProductsPage      = lazy(() => import('./pages/ProductsPage'))
+const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'))
+const DashboardPage     = lazy(() => import('./pages/DashboardPage'))
+const AboutPage         = lazy(() => import('./pages/AboutPage'))
+const NotFoundPage      = lazy(() => import('./pages/NotFoundPage'))
 
-export default function Counter({
-  initialValue = 0,
-  step = 1,
-  onCountChange,
-}: CounterProps) {
-  const [count, setCount] = useState(initialValue)
-
-  function increment() {
-    const next = count + step
-    setCount(next)
-    onCountChange?.(next)
-  }
-
-  function decrement() {
-    const next = count - step
-    setCount(next)
-    onCountChange?.(next)
-  }
-
-  function reset() {
-    setCount(initialValue)
-    onCountChange?.(initialValue)
-  }
-
+function PageLoader() {
   return (
-    <div>
-      <p data-testid="count-display">Cuenta: {count}</p>
-      <button onClick={decrement}>Decrementar</button>
-      <button onClick={increment}>Incrementar</button>
-      <button onClick={reset}>Reset</button>
+    <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
+      <p style={{ color: '#9ca3af' }}>Cargando...</p>
     </div>
   )
 }
+
+export default function App() {
+  return (
+    // Suspense muestra el fallback mientras el chunk se descarga
+    <Suspense fallback={<PageLoader />}>
+      <Routes>
+        <Route element={<RootLayout />}>
+          <Route index                element={<HomePage />} />
+          <Route path="products"      element={<ProductsPage />} />
+          <Route path="products/:id"  element={<ProductDetailPage />} />
+          <Route path="dashboard"     element={<DashboardPage />} />
+          <Route path="about"         element={<AboutPage />} />
+          <Route path="*"             element={<NotFoundPage />} />
+        </Route>
+      </Routes>
+    </Suspense>
+  )
+}
 ```
+
+> `lazy` solo funciona con `export default`. Si el componente usa
+> named export, necesitas un archivo intermedio o adaptas la importación:
+>
+> ```tsx
+> // Componente con named export
+> const MyPage = lazy(() =>
+>   import('./pages/MyPage').then((m) => ({ default: m.MyPage }))
+> )
+> ```
 
 ### Prueba esto
 
-- Renderiza `<Counter initialValue={5} step={3} />` en `App.tsx` y haz clic en "Incrementar" — el contador pasa de 5 a 8, confirmando que `step` se aplica correctamente
-- Añade una prop `max?: number` al componente y deshabilita el botón "Incrementar" cuando `count >= max` — los tests existentes siguen pasando; añade un nuevo test que verifique que el botón está deshabilitado al llegar al máximo
-- Cambia el texto del botón de "Incrementar" a "Sumar" en el componente — el test que usa `getByRole('button', { name: 'Incrementar' })` falla inmediatamente, lo que demuestra por qué RTL busca por contenido visible
-- Cambia `data-testid="count-display"` a `role="status"` en el `<p>` — actualiza los tests para usar `getByRole('status')` en lugar de `getByTestId('count-display')`
-- Pasa `onCountChange={vi.fn()}` al componente y haz clic varias veces en los botones — abre la consola y observa que la función mock se llama con cada nuevo valor
-- Añade un límite mínimo: impide que el contador baje de `0` modificando `decrement` — escribe un test que verifique que el contador no cambia al hacer clic en "Decrementar" cuando ya está en 0
+- Abre las DevTools de red, ve a la pestaña "JS" y navega por primera vez a `/products` — observa que se descarga un chunk separado (algo como `ProductsPage-[hash].js`) solo en ese momento
+- Navega de `/` a `/dashboard` — el chunk del dashboard se descarga solo cuando llegas allí; observa en la red el nuevo archivo `.js`
+- Simula una conexión lenta con el throttling de DevTools (3G lento) y navega a una ruta perezosa — observa el `<p>Cargando...</p>` del `PageLoader` durante la descarga del chunk
+- Elimina `<Suspense>` manteniendo `lazy` y navega a una ruta perezosa — observa el error en consola: React exige un `Suspense` ancestro para cualquier componente `lazy`
+- Cambia `lazy(() => import('./pages/HomePage'))` a `import('./pages/HomePage')` (sin `lazy`) y navega — el componente se carga de inmediato pero el import dinámico sin `lazy` no integra con `Suspense` y React lo trata como una promesa normal
 
-### `src/components/SearchInput.tsx`
+---
+
+## `src/App.tsx` — todo junto
 
 ```tsx
-// src/components/SearchInput.tsx
+// src/App.tsx
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
+import UserCard       from './components/UserCard'
+import ProductTable   from './components/ProductTable'
+import ExpensiveChart from './components/ExpensiveChart'
+import RenderCounter  from './components/RenderCounter'
 
-interface SearchInputProps {
-  onSearch:     (query: string) => void
-  placeholder?: string
-  minLength?:   number
-}
+// ┌──────────────────────────────────────────────────────────────────────┐
+// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
+// │  1  UserCard      — memo + useCallback, re-renders del padre        │
+// │  2  ProductTable  — memo + useCallback + useMemo en tabla           │
+// │  3  ExpensiveChart — memo con comparador personalizado              │
+// └──────────────────────────────────────────────────────────────────────┘
+const PASO = 1
 
-export default function SearchInput({
-  onSearch,
-  placeholder = 'Buscar...',
-  minLength   = 2,
-}: SearchInputProps) {
-  const [query, setQuery] = useState('')
-  const [error, setError] = useState<string | null>(null)
+const CHART_DATA = [42, 78, 35, 91, 63, 57, 84]
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    if (query.trim().length < minLength) {
-      setError(`Mínimo ${minLength} caracteres`)
-      return
-    }
-    setError(null)
-    onSearch(query.trim())
-  }
+function Step1() {
+  const [count, setCount] = useState(0)
+
+  // useCallback — referencia estable para UserCard memo
+  const handleEditUser = useCallback(() => {
+    console.log('Editando usuario')
+  }, [])
 
   return (
-    <form onSubmit={handleSubmit} role="search">
-      <input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder={placeholder}
-        aria-label="Campo de búsqueda"
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+        <h2 style={{ fontSize: 15, margin: 0 }}>React.memo — UserCard</h2>
+        <RenderCounter label="App" />
+      </div>
+
+      <button
+        onClick={() => setCount((c) => c + 1)}
+        style={{
+          padding: '8px 16px', background: '#6366f1', color: '#fff',
+          border: 'none', borderRadius: 6, cursor: 'pointer', marginBottom: 12,
+        }}
+      >
+        Re-renderizar App ({count} veces)
+      </button>
+
+      <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 12 }}>
+        UserCard tiene memo + onEdit con useCallback — no re-renderiza al hacer clic en el botón.
+      </p>
+
+      <UserCard
+        name="Ana García"
+        email="ana@ejemplo.com"
+        role="admin"
+        onEdit={handleEditUser}
       />
-      <button type="submit">Buscar</button>
-      {error && <p role="alert">{error}</p>}
-    </form>
+    </div>
   )
 }
-```
 
-### Prueba esto
-
-- Renderiza `<SearchInput onSearch={(q) => console.log(q)} minLength={3} />` y escribe "ab" antes de hacer clic en "Buscar" — aparece el mensaje "Mínimo 3 caracteres" en el DOM
-- Escribe una búsqueda válida y haz clic en "Buscar" — el mensaje de error desaparece porque `setError(null)` se ejecuta antes de llamar a `onSearch`
-- Elimina el atributo `role="search"` del `<form>` — el test que usa `getByRole('textbox', { name: 'Campo de búsqueda' })` sigue pasando, pero ya no se puede encontrar el formulario por su rol semántico
-- Cambia `role="alert"` del `<p>` de error a `className="error"` — el test que usa `getByRole('alert')` falla; demuestra que los atributos de accesibilidad también sirven como selectores de test robustos
-- Añade `aria-label` dinámico al botón de búsqueda: `aria-label={query ? 'Buscar "${query}"' : 'Buscar'}` — los tests que buscan el botón por nombre deben actualizar el selector
-- Prueba enviar la búsqueda con la tecla Enter escribiendo en el campo y presionando Enter con `await user.keyboard('{Enter}')` — el formulario se envía igual que con el botón porque es un `<form>` nativo
-
-### `src/components/UserCard.tsx`
-
-```tsx
-// src/components/UserCard.tsx
-
-interface UserCardProps {
-  name:       string
-  email:      string
-  isVerified: boolean
-  onEdit:     () => void
-  onDelete:   () => void
-}
-
-export default function UserCard({
-  name, email, isVerified, onEdit, onDelete,
-}: UserCardProps) {
+function Step2() {
   return (
-    <article aria-label={`Tarjeta de ${name}`}>
-      <h3>{name}</h3>
-      <p>{email}</p>
-      {isVerified
-        ? <span data-testid="verified-badge">✓ Verificado</span>
-        : <span data-testid="unverified-badge">No verificado</span>
-      }
-      <button onClick={onEdit}   aria-label={`Editar ${name}`}>Editar</button>
-      <button onClick={onDelete} aria-label={`Eliminar ${name}`}>Eliminar</button>
-    </article>
+    <div>
+      <h2 style={{ fontSize: 15, marginBottom: 12 }}>
+        memo + useCallback + useMemo — ProductTable
+      </h2>
+      <ProductTable />
+    </div>
+  )
+}
+
+function Step3() {
+  return (
+    <div>
+      <h2 style={{ fontSize: 15, marginBottom: 12 }}>
+        memo con comparador personalizado — ExpensiveChart
+      </h2>
+      <ExpensiveChart
+        data={CHART_DATA}
+        label="Ventas semanales"
+        color="#0070f3"
+      />
+    </div>
+  )
+}
+
+export default function App() {
+  const content =
+    PASO === 1 ? <Step1 /> :
+    PASO === 2 ? <Step2 /> :
+    PASO === 3 ? <Step3 /> :
+    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
+
+  return (
+    <main style={{ maxWidth: 580, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
+      {content}
+    </main>
   )
 }
 ```
 
 ### Prueba esto
 
-- Renderiza `<UserCard name="Ana García" email="ana@ejemplo.com" isVerified={true} onEdit={() => {}} onDelete={() => {}} />` — observa el badge "✓ Verificado" y los dos botones con sus `aria-label` dinámicos
-- Cambia `isVerified` a `false` — el badge cambia a "No verificado" y el test de `verified-badge` fallaría; el de `unverified-badge` pasaría
-- Añade una prop `role?: 'admin' | 'user'` y muestra una etiqueta adicional cuando `role === 'admin'` — escribe un test que verifique que la etiqueta aparece solo para administradores
-- Haz clic en el botón "Editar" de la tarjeta renderizada en `App.tsx` y abre la consola — la función `onEdit` que pasaste se ejecuta, lo que confirma el flujo de callbacks
-- Cambia el `aria-label` del botón de editar de `Editar ${name}` a simplemente `"Editar"` — el test `getByRole('button', { name: 'Editar Ana García' })` falla; esto muestra que los `aria-label` dinámicos hacen los tests más específicos y resistentes a colisiones
-- Añade `data-testid="user-card"` al `<article>` — escribe un test que verifique que el elemento existe en el DOM y que tiene el `aria-label` correcto con `toHaveAttribute`
+- Cambia `PASO` a `1` y guarda — observa `UserCard` con el botón de re-renderizar; el contador de App sube pero `UserCard` no se re-renderiza
+- Cambia `PASO` a `2` y guarda — interactúa con el filtro y con los botones de eliminar; observa el total recalculándose con `useMemo`
+- Cambia `PASO` a `3` y guarda — abre la consola y provoca un re-render del padre; el gráfico no se re-renderiza gracias al comparador personalizado
+- Cambia `PASO` a `99` y guarda — observa el mensaje de error en rojo indicando que el paso no existe
+- En `PASO === 1`, quita `useCallback` de `handleEditUser` y añade `<RenderCounter label="UserCard" />` dentro de `UserCard` — observa que el contador sube con cada clic en el botón aunque el usuario nunca interactuó con la tarjeta
 
 ---
 
-## Los tests — todos verificados y pasando (20/20)
+## Cuándo optimizar — y cuándo no
 
-### `src/__tests__/StatusBadge.test.tsx`
+| Optimiza cuando... | No optimizes si... |
+|---|---|
+| Tienes listas largas con muchos re-renders medibles | El componente es simple y rápido |
+| Un cálculo tarda visiblemente | Solo tienes 1–2 props simples |
+| Pasas funciones a hijos con `memo` | El valor memoizado se invalida en cada render de todas formas |
+| Puedes medir el problema con DevTools | "Puede que sea lento en el futuro" |
 
-```tsx
-// src/__tests__/StatusBadge.test.tsx
-
-import { render, screen } from '@testing-library/react'
-import StatusBadge         from '../components/StatusBadge'
-
-describe('StatusBadge', () => {
-  it('muestra el texto por defecto según el status', () => {
-    render(<StatusBadge status="active" />)
-    expect(screen.getByTestId('status-badge')).toHaveTextContent('Activo')
-  })
-
-  it('muestra el label personalizado cuando se proporciona', () => {
-    render(<StatusBadge status="active" label="En línea" />)
-    expect(screen.getByTestId('status-badge')).toHaveTextContent('En línea')
-  })
-
-  it('renderiza correctamente para cada status', () => {
-    const casos: Array<{ status: 'active' | 'inactive' | 'pending'; texto: string }> = [
-      { status: 'active',   texto: 'Activo'    },
-      { status: 'inactive', texto: 'Inactivo'  },
-      { status: 'pending',  texto: 'Pendiente' },
-    ]
-
-    for (const { status, texto } of casos) {
-      const { unmount } = render(<StatusBadge status={status} />)
-      expect(screen.getByTestId('status-badge')).toHaveTextContent(texto)
-      unmount()  // limpia el DOM entre iteraciones
-    }
-  })
-})
-```
-
-### Prueba esto
-
-- Ejecuta `npm test` con estos tests escritos — los tres tests pasan y Vitest muestra el árbol "StatusBadge > muestra el texto por defecto..." en verde
-- Cambia `toHaveTextContent('Activo')` a `toHaveTextContent('Activos')` — el test falla con un mensaje claro: "Expected element to have text content: Activos, Received: Activo"
-- Añade un cuarto test para el label personalizado con `status="pending"` y `label="En revisión"` — ejecuta los tests y observa que el nuevo test aparece en el árbol con el nombre que le diste en `it(...)`
-- Elimina `unmount()` del bucle del tercer test — el test lanza un error porque hay múltiples elementos con `data-testid="status-badge"` y `getByTestId` solo espera encontrar uno
-- Cambia `getByTestId('status-badge')` por `getByText('Activo')` en el primer test — el test sigue pasando; observa que `getByText` es menos específico pero igualmente válido para este caso
-- Añade `it.skip('test pendiente', () => { ... })` para un cuarto status `'error'` aún no implementado — Vitest muestra el test como "skipped" en amarillo sin fallar la suite
-
-### `src/__tests__/Counter.test.tsx`
-
-```tsx
-// src/__tests__/Counter.test.tsx
-
-import { render, screen } from '@testing-library/react'
-import userEvent            from '@testing-library/user-event'
-import Counter              from '../components/Counter'
-
-describe('Counter', () => {
-  it('muestra el valor inicial por defecto (0)', () => {
-    render(<Counter />)
-    expect(screen.getByTestId('count-display')).toHaveTextContent('Cuenta: 0')
-  })
-
-  it('respeta el valor inicial personalizado', () => {
-    render(<Counter initialValue={10} />)
-    expect(screen.getByTestId('count-display')).toHaveTextContent('Cuenta: 10')
-  })
-
-  it('incrementa al hacer clic en Incrementar', async () => {
-    const user = userEvent.setup()
-    render(<Counter />)
-    await user.click(screen.getByRole('button', { name: 'Incrementar' }))
-    expect(screen.getByTestId('count-display')).toHaveTextContent('Cuenta: 1')
-  })
-
-  it('decrementa al hacer clic en Decrementar', async () => {
-    const user = userEvent.setup()
-    render(<Counter initialValue={5} />)
-    await user.click(screen.getByRole('button', { name: 'Decrementar' }))
-    expect(screen.getByTestId('count-display')).toHaveTextContent('Cuenta: 4')
-  })
-
-  it('respeta el step personalizado', async () => {
-    const user = userEvent.setup()
-    render(<Counter step={5} />)
-    await user.click(screen.getByRole('button', { name: 'Incrementar' }))
-    expect(screen.getByTestId('count-display')).toHaveTextContent('Cuenta: 5')
-  })
-
-  it('resetea al valor inicial al hacer clic en Reset', async () => {
-    const user = userEvent.setup()
-    render(<Counter initialValue={3} />)
-    await user.click(screen.getByRole('button', { name: 'Incrementar' }))
-    await user.click(screen.getByRole('button', { name: 'Incrementar' }))
-    await user.click(screen.getByRole('button', { name: 'Reset' }))
-    expect(screen.getByTestId('count-display')).toHaveTextContent('Cuenta: 3')
-  })
-
-  it('llama a onCountChange con el nuevo valor', async () => {
-    const user     = userEvent.setup()
-    const onChange = vi.fn()
-    render(<Counter onCountChange={onChange} />)
-    await user.click(screen.getByRole('button', { name: 'Incrementar' }))
-    expect(onChange).toHaveBeenCalledWith(1)
-    expect(onChange).toHaveBeenCalledTimes(1)
-  })
-})
-```
-
-### Prueba esto
-
-- Ejecuta `npm test` y observa que los 7 tests de `Counter` pasan — el árbol muestra cada descripción del `it(...)` como una fila verde independiente
-- Cambia `toHaveTextContent('Cuenta: 1')` a `toHaveTextContent('Cuenta: 2')` en el test de incremento — el test falla con el diff exacto: "Expected: Cuenta: 2 / Received: Cuenta: 1"
-- Elimina el `await` antes de `user.click(...)` en el test de incremento — el test puede pasar o fallar de forma no determinista (falso positivo); añade el `await` de vuelta para entender por qué es obligatorio
-- Añade un test que haga clic en "Incrementar" tres veces seguidas y verifique que el contador muestra "Cuenta: 3" — usa tres `await user.click(...)` consecutivos en el mismo test
-- Cambia `vi.fn()` por `vi.fn().mockReturnValue(undefined)` en el test del callback — el comportamiento es idéntico; observa que `mockReturnValue` es útil cuando el callback necesita retornar un valor específico
-- Añade `expect(onChange).not.toHaveBeenCalledWith(0)` al test del callback después de incrementar — el test pasa porque el callback se llamó con `1`, no con `0`
-- Escribe un test que haga clic en "Decrementar" desde `initialValue={0}` y verifique que el contador muestra "Cuenta: -1" — ejecuta el test para confirmar que el componente actual permite valores negativos
-
-### `src/__tests__/SearchInput.test.tsx`
-
-```tsx
-// src/__tests__/SearchInput.test.tsx
-
-import { render, screen } from '@testing-library/react'
-import userEvent            from '@testing-library/user-event'
-import SearchInput          from '../components/SearchInput'
-
-describe('SearchInput', () => {
-  it('renderiza el input y el botón', () => {
-    render(<SearchInput onSearch={vi.fn()} />)
-    expect(screen.getByRole('textbox', { name: 'Campo de búsqueda' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Buscar' })).toBeInTheDocument()
-  })
-
-  it('muestra error si el query es menor al mínimo', async () => {
-    const user = userEvent.setup()
-    render(<SearchInput onSearch={vi.fn()} minLength={3} />)
-    await user.type(screen.getByRole('textbox'), 'ab')
-    await user.click(screen.getByRole('button', { name: 'Buscar' }))
-    expect(screen.getByRole('alert')).toHaveTextContent('Mínimo 3 caracteres')
-  })
-
-  it('llama a onSearch con el valor correcto', async () => {
-    const user     = userEvent.setup()
-    const onSearch = vi.fn()
-    render(<SearchInput onSearch={onSearch} />)
-    await user.type(screen.getByRole('textbox'), 'react')
-    await user.click(screen.getByRole('button', { name: 'Buscar' }))
-    expect(onSearch).toHaveBeenCalledWith('react')
-    expect(onSearch).toHaveBeenCalledTimes(1)
-  })
-
-  it('no muestra error si el query es válido', async () => {
-    const user = userEvent.setup()
-    render(<SearchInput onSearch={vi.fn()} />)
-    await user.type(screen.getByRole('textbox'), 'typescript')
-    await user.click(screen.getByRole('button', { name: 'Buscar' }))
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-  })
-
-  it('usa el placeholder proporcionado', () => {
-    render(<SearchInput onSearch={vi.fn()} placeholder="Buscar productos..." />)
-    expect(screen.getByPlaceholderText('Buscar productos...')).toBeInTheDocument()
-  })
-})
-```
-
-### Prueba esto
-
-- Ejecuta `npm test` — los 5 tests de `SearchInput` pasan; observa en la salida que el test de error de validación lleva más tiempo porque `userEvent.type` simula cada pulsación de tecla
-- Cambia `minLength={3}` a `minLength={5}` en el test de error de validación pero mantén `'ab'` como entrada — el error cambia a "Mínimo 5 caracteres"; actualiza la aserción para que el test vuelva a pasar
-- En el test de `onSearch`, cambia `'react'` por `'  react  '` (con espacios) como entrada de `user.type` — observa que `onSearch` se llama con `'react'` sin espacios porque `handleSubmit` llama a `query.trim()` antes de pasar el valor
-- Añade un test que verifique que `onSearch` no se llama si el query está vacío y se hace clic en "Buscar" — usa `expect(onSearch).not.toHaveBeenCalled()` para la aserción
-- Cambia `screen.queryByRole('alert')` a `screen.getByRole('alert')` en el test de ausencia de error — el test lanza una excepción en lugar de fallar limpiamente; esto ilustra cuándo usar `queryBy*` frente a `getBy*`
-- Escribe un test que verifique que el mensaje de error desaparece al escribir una búsqueda válida después de haber recibido un error: envía un query corto, observa el error, escribe uno válido y vuelve a enviar, luego verifica con `queryByRole('alert')` que el error ya no está
-
-### `src/__tests__/UserCard.test.tsx`
-
-```tsx
-// src/__tests__/UserCard.test.tsx
-
-import { render, screen } from '@testing-library/react'
-import userEvent            from '@testing-library/user-event'
-import UserCard             from '../components/UserCard'
-
-// Props por defecto reutilizables en todos los tests
-const DEFAULT_PROPS = {
-  name:       'Ana García',
-  email:      'ana@ejemplo.com',
-  isVerified: true,
-  onEdit:     vi.fn(),
-  onDelete:   vi.fn(),
-}
-
-describe('UserCard', () => {
-  it('muestra nombre y email', () => {
-    render(<UserCard {...DEFAULT_PROPS} />)
-    expect(screen.getByRole('heading', { name: 'Ana García' })).toBeInTheDocument()
-    expect(screen.getByText('ana@ejemplo.com')).toBeInTheDocument()
-  })
-
-  it('muestra badge verificado cuando isVerified es true', () => {
-    render(<UserCard {...DEFAULT_PROPS} isVerified={true} />)
-    expect(screen.getByTestId('verified-badge')).toBeInTheDocument()
-    expect(screen.queryByTestId('unverified-badge')).not.toBeInTheDocument()
-  })
-
-  it('muestra badge no verificado cuando isVerified es false', () => {
-    render(<UserCard {...DEFAULT_PROPS} isVerified={false} />)
-    expect(screen.getByTestId('unverified-badge')).toBeInTheDocument()
-    expect(screen.queryByTestId('verified-badge')).not.toBeInTheDocument()
-  })
-
-  it('llama a onEdit al hacer clic en Editar', async () => {
-    const user   = userEvent.setup()
-    const onEdit = vi.fn()
-    render(<UserCard {...DEFAULT_PROPS} onEdit={onEdit} />)
-    await user.click(screen.getByRole('button', { name: 'Editar Ana García' }))
-    expect(onEdit).toHaveBeenCalledTimes(1)
-  })
-
-  it('llama a onDelete al hacer clic en Eliminar', async () => {
-    const user     = userEvent.setup()
-    const onDelete = vi.fn()
-    render(<UserCard {...DEFAULT_PROPS} onDelete={onDelete} />)
-    await user.click(screen.getByRole('button', { name: 'Eliminar Ana García' }))
-    expect(onDelete).toHaveBeenCalledTimes(1)
-  })
-})
-```
-
-### Prueba esto
-
-- Ejecuta `npm test` — los 5 tests de `UserCard` pasan; observa que los tests de `onEdit` y `onDelete` usan `vi.fn()` local en lugar del `DEFAULT_PROPS.onEdit` para poder verificar llamadas de forma aislada
-- Cambia `name: 'Ana García'` en `DEFAULT_PROPS` a `name: 'Carlos López'` — todos los tests fallan porque los `aria-label` dinámicos de los botones cambian a "Editar Carlos López" y "Eliminar Carlos López"
-- Haz clic dos veces en el botón "Editar" dentro del test `it('llama a onEdit...')` añadiendo otro `await user.click(...)` — cambia la aserción a `toHaveBeenCalledTimes(2)` para ver que el mock registra múltiples llamadas
-- Añade `beforeEach(() => { vi.clearAllMocks() })` al `describe` de `UserCard` — esto reinicia los contadores de los mocks entre tests para evitar que llamadas de un test contaminen las aserciones del siguiente
-- Añade un test que verifique que el artículo tiene el `aria-label` correcto: `expect(screen.getByRole('article')).toHaveAttribute('aria-label', 'Tarjeta de Ana García')` — el test pasa porque el componente usa `aria-label={Tarjeta de ${name}}`
-- Escribe un test que renderice dos `UserCard` con nombres diferentes y verifique que puedes seleccionar cada botón de forma independiente usando `getByRole('button', { name: 'Editar Ana García' })` y `getByRole('button', { name: 'Editar Carlos López' })`
+> **Regla de oro**: primero mide, luego optimiza.
+> Añadir `memo`, `useCallback` y `useMemo` en todo el código tiene
+> un costo real — cada hook necesita almacenar el valor anterior y
+> comparar dependencias en cada render. La optimización prematura
+> puede hacer el código más lento, no más rápido.
 
 ---
 
-## Conceptos clave de RTL
-
-### Queries — cómo buscar elementos
+## Errores comunes con `memo`
 
 ```tsx
-// getBy* — lanza si no existe o hay más de uno
-screen.getByRole('button', { name: 'Enviar' })
-screen.getByText('Hola mundo')
-screen.getByTestId('count-display')
-screen.getByPlaceholderText('Buscar...')
-screen.getByLabelText('Email')
+// ❌ memo no sirve si pasas un objeto literal como prop
+// Se crea un objeto nuevo en cada render → memo siempre falla
+<UserCard style={{ color: 'red' }} />
 
-// queryBy* — retorna null si no existe (no lanza)
-// Útil para verificar que algo NO está en el DOM
-screen.queryByRole('alert')       // null si no hay alerta
-screen.queryByTestId('error-msg') // null si no hay error
+// ✅ Extrae el objeto fuera del componente o usa useMemo
+const cardStyle = { color: 'red' }  // fuera del componente
+<UserCard style={cardStyle} />
 
-// findBy* — async, espera a que aparezca
-await screen.findByText('Cargando completo')
-await screen.findByRole('status')
-```
+// ❌ memo no sirve si pasas una función sin useCallback
+<ProductRow onDelete={() => setItems(...)} />
 
-### Prioridad de queries — de más a menos preferida
+// ✅ useCallback estabiliza la referencia
+const handleDelete = useCallback((id: number) => {
+  setItems((prev) => prev.filter((i) => i.id !== id))
+}, [])
+<ProductRow onDelete={handleDelete} />
 
-```
-1. getByRole           ← accesibilidad real del elemento
-2. getByLabelText      ← inputs asociados a su label
-3. getByPlaceholderText
-4. getByText           ← contenido visible
-5. getByDisplayValue   ← valor actual de inputs/selects
-6. getByTestId         ← último recurso — añade data-testid al componente
-```
+// ❌ Comparador personalizado que siempre retorna true
+const BadMemo = memo(Component, () => true)
+// El componente nunca se actualiza aunque las props cambien
 
-> `getByRole` es la query más robusta: usa el árbol de accesibilidad
-> real del navegador. Si tu componente es accesible, los tests con
-> `getByRole` también pasan con lectores de pantalla.
-
-### `userEvent` vs `fireEvent`
-
-```tsx
-// fireEvent — simula el evento de DOM directamente (simple)
-import { fireEvent } from '@testing-library/react'
-fireEvent.click(button)
-fireEvent.change(input, { target: { value: 'texto' } })
-
-// userEvent — simula el comportamiento real del usuario (preferido)
-// Dispara todos los eventos intermedios (focus, keydown, keyup, etc.)
-const user = userEvent.setup()
-await user.click(button)
-await user.type(input, 'texto')     // dispara cada keystroke
-await user.keyboard('{Enter}')
-await user.selectOptions(select, 'opción')
-await user.clear(input)
-```
-
-> Usa `userEvent` por defecto. Es más fiel al comportamiento real.
-> `fireEvent` sirve para casos donde necesitas más control.
-
-### Matchers de `jest-dom`
-
-```tsx
-expect(element).toBeInTheDocument()
-expect(element).not.toBeInTheDocument()
-expect(element).toBeVisible()
-expect(element).toBeDisabled()
-expect(element).toBeEnabled()
-expect(element).toHaveTextContent('texto')
-expect(element).toHaveValue('valor')
-expect(element).toHaveAttribute('type', 'email')
-expect(element).toHaveClass('mi-clase')
-expect(element).toHaveFocus()
-expect(element).toBeChecked()
-```
-
----
-
-## Testear callbacks con `vi.fn()`
-
-`vi.fn()` crea una función mock — registra cada llamada para que puedas
-verificar cuántas veces fue llamada y con qué argumentos:
-
-```tsx
-it('llama a onSearch con el término correcto', async () => {
-  const user     = userEvent.setup()
-  const onSearch = vi.fn()          // función mock
-
-  render(<SearchInput onSearch={onSearch} />)
-  await user.type(screen.getByRole('textbox'), 'react')
-  await user.click(screen.getByRole('button', { name: 'Buscar' }))
-
-  expect(onSearch).toHaveBeenCalledTimes(1)        // se llamó exactamente una vez
-  expect(onSearch).toHaveBeenCalledWith('react')   // con este argumento
-  expect(onSearch).not.toHaveBeenCalledWith('React') // no con este otro
-})
-```
-
-### Prueba esto
-
-- Copia este test a tu archivo de tests, ejecútalo con `npm test` — pasa; modifica el argumento de `toHaveBeenCalledWith` a `'React'` con mayúscula — falla con el mensaje "Expected: React / Received: react"
-- Añade `expect(onSearch).toHaveBeenCalledTimes(2)` al final del test sin hacer un segundo clic — el test falla con "Expected number of calls: 2 / Received: 1", que es el error más común con mocks
-- Reemplaza `vi.fn()` por `vi.fn().mockImplementation((q) => console.log('Buscando:', q))` — el mock ahora ejecuta código real; útil para depurar qué argumentos recibe sin cambiar el test
-- Llama a `onSearch.mockReset()` antes de la segunda parte del test si necesitas verificar llamadas desde cero — esto reinicia `toHaveBeenCalledTimes` a 0 sin necesidad de crear un nuevo mock
-- Añade `expect(onSearch).toHaveBeenLastCalledWith('react')` — esta aserción verifica solo la última llamada, útil cuando el mock se llama varias veces y solo te interesa el resultado final
-- Verifica el argumento por posición con `expect(onSearch.mock.calls[0][0]).toBe('react')` — accede directamente al registro de llamadas para casos donde los matchers estándar no son suficientes
-
----
-
-## Errores comunes en tests RTL
-
-```tsx
-// ❌ Buscar por clase CSS — frágil, rompe si cambias el estilo
-screen.getByClass('btn-primary')
-
-// ❌ Buscar por selector CSS — frágil
-document.querySelector('.card > p')
-
-// ✅ Buscar por rol accesible — robusto
-screen.getByRole('button', { name: 'Enviar' })
-
-// ❌ Olvidar await en userEvent — el test pasa aunque falle
-user.click(button)
-expect(screen.getByText('Resultado')).toBeInTheDocument() // puede ser falso positivo
-
-// ✅ Siempre await con userEvent
-await user.click(button)
-expect(screen.getByText('Resultado')).toBeInTheDocument()
-
-// ❌ Usar getBy* cuando el elemento puede no existir
-screen.getByText('Error')   // lanza si no hay error — falso negativo
-
-// ✅ queryBy* para verificar ausencia
-expect(screen.queryByText('Error')).not.toBeInTheDocument()
-
-// ❌ Testear implementación interna
-expect(component.state.count).toBe(1)   // accede al estado directamente
-
-// ✅ Testear lo que el usuario ve
-expect(screen.getByTestId('count-display')).toHaveTextContent('Cuenta: 1')
+// ❌ Comparador que no compara todos los campos
+const PartialMemo = memo(Component, (prev, next) =>
+  prev.name === next.name  // ignora email, role — bug silencioso
+)
 ```
 
 ---
 
 ## Ejercicios propuestos
 
-1. **Testear `StatusBadge` de página 2** — añade `data-testid="status-badge"` al componente
-   `StatusBadge` que creaste en la página 2 y escribe tests para verificar
-   que cada variante (`active`, `inactive`, `pending`, `error`) muestra el texto correcto.
+1. **Medir antes de optimizar** — crea una lista de 50 `UserCard` en un componente
+   con un input de búsqueda. Añade `RenderCounter` a cada `UserCard`.
+   Verifica cuántos re-renders ocurren al escribir en el input.
+   Luego aplica `memo` + `useCallback` y compara.
 
-2. **Testear `ContactForm` de página 12** — escribe tests para verificar que:
-   - El formulario muestra errores si se envía vacío.
-   - El error desaparece al escribir en el campo.
-   - El mensaje de éxito aparece tras un envío correcto (usa `findByText` para esperar async).
+2. **InfiniteList** — crea una lista que empieza con 20 items y tiene un botón
+   "Cargar más" que añade 20 más. Usa `memo` en el componente de cada fila
+   para que los items ya cargados no se re-rendericen al cargar más.
 
-3. **Testear `useCounter`** — instala `@testing-library/react-hooks` o usa `renderHook`
-   de RTL para testear el hook directamente sin montar un componente completo.
-
----
-
-## Resumen de la página 13
-
-- Vitest es el test runner — compatible con la configuración de Vite, sin configuración extra.
-- RTL testea comportamiento del usuario, no implementación interna.
-- La configuración mínima: `vite.config.ts` con `test: { environment: 'jsdom', globals: true }` + `setup.ts` con `import '@testing-library/jest-dom'`.
-- `getByRole` es la query más robusta — usa el árbol de accesibilidad real.
-- `queryBy*` retorna `null` si no existe — úsalo para verificar ausencia con `.not.toBeInTheDocument()`.
-- `findBy*` es async — úsalo cuando el elemento aparece después de una operación async.
-- `userEvent.setup()` + `await user.click/type/...` simula el comportamiento real del usuario.
-- `vi.fn()` crea mocks de funciones — verifica llamadas con `toHaveBeenCalledWith` y `toHaveBeenCalledTimes`.
-- `data-testid` es el último recurso — primero intenta con `getByRole`, `getByLabelText` o `getByText`.
+3. **LazyDashboard** — crea un dashboard con 3 pestañas pesadas. Cada pestaña
+   es un componente separado cargado con `lazy`. Solo se descarga el componente
+   de la pestaña que el usuario activa.
 
 ---
 
-> **Siguiente página →** Fetching con TanStack Query (React Query):
-> caché automático, estados de carga, refetching y mutaciones tipadas.
+## Resumen de la página 11
+
+- React re-renderiza un componente cuando cambia su estado, props, contexto o cuando su padre re-renderiza.
+- `React.memo` evita re-renders del hijo cuando sus props no cambian — usa comparación `===` por defecto.
+- `memo` sin `useCallback` es inútil cuando se pasan funciones como props — las funciones son objetos y crean referencias nuevas en cada render.
+- El segundo argumento de `memo` permite un comparador personalizado — útil para arrays y objetos en props.
+- `useMemo` estabiliza arrays y objetos calculados que se pasan como props a componentes con `memo`.
+- `useRef` para contar renders es la forma más rápida de detectar re-renders innecesarios en desarrollo.
+- `lazy` + `Suspense` divide el bundle por rutas — el código de cada página se descarga solo cuando el usuario navega a ella.
+- `lazy` requiere `export default`. Para named exports usa `.then((m) => ({ default: m.Component }))`.
+- Regla de oro: mide primero, optimiza después. La memoización tiene un costo propio.
+
+---
+
+> **Siguiente página →** Formularios y validación: formularios controlados,
+> tipado de eventos, validación manual y con Zod.

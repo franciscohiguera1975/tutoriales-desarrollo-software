@@ -1,247 +1,287 @@
-# Curso React.js + TypeScript — Página 14
+# Curso React.js + TypeScript — Página 12
 ## Módulo 6 · Ecosistema
-### TanStack Query v5: fetching, caché, mutaciones y paginación
+### Formularios y validación: controlados, validación manual y Zod v4
 
 ---
 
-## ¿Por qué TanStack Query?
+## Formularios en React: controlados vs no controlados
 
-Cuando haces fetch de datos en React con `useEffect` + `useState`, terminas
-repitiendo siempre el mismo código: estado de carga, estado de error, caché
-manual, revalidación, cancelación. TanStack Query (antes React Query)
-resuelve todo esto de forma automática y declarativa.
+En React hay dos enfoques para manejar formularios:
 
-| Sin TanStack Query | Con TanStack Query |
-|---|---|
-| `loading`, `error`, `data` manuales | Desestructuras `isPending`, `isError`, `data` |
-| Caché manual — mismo dato se refetcha en cada componente | Caché automático por `queryKey` |
-| Re-fetching manual al volver al foco | Revalidación automática al volver a la pestaña |
-| Race conditions con flag `cancelled` | Manejadas internamente |
-| Estado de mutaciones gestionado a mano | `useMutation` con `isPending`, `isError`, `isSuccess` |
+| Enfoque | Quién controla el valor | Cuándo usarlo |
+|---|---|---|
+| **Controlado** | React (el estado) | La mayoría de los casos — formularios con validación, valores que dependen entre sí |
+| **No controlado** | El DOM | Formularios muy simples, subida de archivos, integración con librerías externas |
+
+El curso usa formularios **controlados** — el valor de cada campo vive
+en el estado de React y se sincroniza con el DOM mediante `value` + `onChange`.
 
 ---
 
-## Instalación
+## Instalación de Zod
 
 ```bash
-npm install @tanstack/react-query
+npm install zod
 ```
 
-La versión actual es **v5** — tiene diferencias de API respecto a v4.
-El curso usa v5 directamente.
+La versión actual es **Zod v4** — tiene cambios de API respecto a v3.
+El curso usa v4 directamente.
 
 ---
 
-## Configuración en `main.tsx`
+## Formulario controlado básico
+
+El patrón mínimo: un estado por campo, un `onChange` que lo actualiza,
+un `onSubmit` que previene el comportamiento nativo y procesa los datos.
 
 ```tsx
-// src/main.tsx
+// src/components/BasicForm.tsx
 
-import { StrictMode }          from 'react'
-import { createRoot }          from 'react-dom/client'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import './index.css'
-import App from './App.tsx'
+import { useState } from 'react'
 
-// QueryClient centraliza el caché y la configuración global
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime:  5 * 60 * 1000, // 5 minutos — datos frescos sin re-fetch
-      retry:      2,              // reintentos en caso de error
-      refetchOnWindowFocus: true, // revalidar al volver a la pestaña
-    },
-  },
-})
+export default function BasicForm() {
+  const [name,  setName]  = useState('')
+  const [email, setEmail] = useState('')
+  const [error, setError] = useState<string | null>(null)
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
-  </StrictMode>,
-)
-```
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()   // evita que la página se recargue
 
-`QueryClientProvider` debe envolver toda la app — igual que `BrowserRouter`.
-Si usas ambos, anida uno dentro del otro en `main.tsx`.
+    if (!name.trim() || !email.includes('@')) {
+      setError('Completa todos los campos correctamente')
+      return
+    }
 
-### Prueba esto
-
-- Cambia `staleTime: 5 * 60 * 1000` a `staleTime: 0` en `defaultOptions` — todas las queries se consideran obsoletas inmediatamente y se re-validan en cada focus de ventana
-- Cambia `retry: 2` a `retry: 0` — cuando una query falla, el error aparece de inmediato sin reintentos
-- Cambia `refetchOnWindowFocus: true` a `refetchOnWindowFocus: false` — minimiza y vuelve a la ventana; observa que TanStack Query ya no hace fetch al recuperar el foco
-- Añade `gcTime: 1000` a `defaultOptions.queries` — los datos se eliminan del caché 1 segundo después de que el componente se desmonta
-- Abre la pestaña Network de DevTools y cambia de tab del navegador varias veces — observa las peticiones de re-validación automática controladas por `refetchOnWindowFocus`
-
----
-
-## Capa de API — funciones de fetch tipadas
-
-Las funciones de fetching van en archivos separados en `src/api/`.
-Son funciones TypeScript puras — sin hooks, sin estado de React.
-TanStack Query las llama cuando necesita los datos.
-
-### `src/api/posts.ts`
-
-```ts
-// src/api/posts.ts
-
-export interface Post {
-  id:     number
-  title:  string
-  body:   string
-  userId: number
-}
-
-export interface NewPost {
-  title:  string
-  body:   string
-  userId: number
-}
-
-const BASE = 'https://jsonplaceholder.typicode.com'
-
-export async function fetchPosts(): Promise<Post[]> {
-  const res = await fetch(`${BASE}/posts?_limit=10`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
-}
-
-export async function fetchPost(id: number): Promise<Post> {
-  const res = await fetch(`${BASE}/posts/${id}`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
-}
-
-export async function createPost(data: NewPost): Promise<Post> {
-  const res = await fetch(`${BASE}/posts`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify(data),
-  })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
-}
-
-export async function updatePost(id: number, data: Partial<NewPost>): Promise<Post> {
-  const res = await fetch(`${BASE}/posts/${id}`, {
-    method:  'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify(data),
-  })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
-}
-
-export async function deletePost(id: number): Promise<void> {
-  const res = await fetch(`${BASE}/posts/${id}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-}
-```
-
-### Prueba esto
-
-- Cambia la constante `BASE` a una URL inválida (`https://api.invalid`) — observa cómo los componentes que usen estas funciones muestran el estado `isError` con el mensaje de red
-- Cambia `_limit=10` a `_limit=3` en `fetchPosts` — la lista muestra solo 3 posts; el caché almacena exactamente esa respuesta
-- Añade `console.log('fetch ejecutado')` dentro de `fetchPosts` — nota cuántas veces aparece en consola comparado con cuántas veces se renderiza el componente
-- Modifica `fetchPost` para que lance siempre un error: `throw new Error('Fallo forzado')` — observa el comportamiento de retry en la consola de red antes de mostrar el error
-- Cambia el método de `createPost` de `'POST'` a `'GET'` — la mutation falla y `mutation.isError` se activa mostrando el mensaje de error en el formulario
-
----
-
-## `useQuery` — leer datos
-
-`useQuery` es el hook principal. Recibe una `queryKey` que identifica
-el dato en el caché y una `queryFn` que lo obtiene.
-
-```tsx
-const { data, isPending, isError, error, isSuccess, isFetching } = useQuery({
-  queryKey: ['posts'],
-  queryFn:  fetchPosts,
-})
-```
-
-### Estados de `useQuery` en v5
-
-| Estado | Significado |
-|---|---|
-| `isPending` | Primera carga — no hay datos en caché todavía |
-| `isFetching` | Hace un fetch en background (incluye re-validaciones) |
-| `isError` | El último fetch falló |
-| `isSuccess` | Hay datos disponibles |
-| `isStale` | Los datos están disponibles pero se consideran obsoletos |
-
-> `isPending` reemplaza a `isLoading` de v4. En v5 `isLoading` sigue
-> existiendo pero `isPending` es el nombre canónico.
-
----
-
-### `src/components/PostList.tsx`
-
-```tsx
-// src/components/PostList.tsx
-
-import { useQuery } from '@tanstack/react-query'
-import { fetchPosts, type Post } from '../api/posts'
-
-export default function PostList() {
-  const {
-    data:      posts,
-    isPending,
-    isError,
-    error,
-    isFetching,
-  } = useQuery({
-    queryKey:  ['posts'],
-    queryFn:   fetchPosts,
-    staleTime: 5 * 60 * 1000,  // 5 minutos sin re-fetch
-  })
-
-  if (isPending) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {[...Array(5)].map((_, i) => (
-          <div
-            key={i}
-            style={{
-              height: 60, background: '#f3f4f6',
-              borderRadius: 8, animation: 'pulse 1.5s infinite',
-            }}
-          />
-        ))}
-      </div>
-    )
-  }
-
-  if (isError) {
-    return (
-      <div style={{ padding: 16, background: '#fef2f2', borderRadius: 8, color: '#dc2626' }}>
-        Error al cargar posts: {error.message}
-      </div>
-    )
+    setError(null)
+    console.log('Datos enviados:', { name, email })
+    // aquí iría el fetch a la API
   }
 
   return (
-    <div>
-      {isFetching && (
-        <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 8 }}>
-          Actualizando...
-        </p>
+    <form
+      onSubmit={handleSubmit}
+      style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 320 }}
+    >
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Nombre"
+        style={inputStyle}
+      />
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Correo electrónico"
+        style={inputStyle}
+      />
+
+      {error && (
+        <p style={{ margin: 0, fontSize: 13, color: '#ef4444' }}>{error}</p>
       )}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {posts.map((post: Post) => (
-          <div
-            key={post.id}
-            style={{ padding: '12px 16px', border: '1px solid #e5e7eb', borderRadius: 8 }}
-          >
-            <p style={{ margin: 0, fontWeight: 600, fontSize: 14 }}>{post.title}</p>
-            <p style={{ margin: '4px 0 0', fontSize: 13, color: '#6b7280' }}>
-              {post.body.slice(0, 80)}...
-            </p>
-          </div>
-        ))}
-      </div>
+
+      <button type="submit" style={submitBtn}>
+        Enviar
+      </button>
+    </form>
+  )
+}
+
+const inputStyle = {
+  padding: '8px 12px',
+  border: '1px solid #d1d5db',
+  borderRadius: 6, fontSize: 14,
+}
+
+const submitBtn = {
+  padding: '10px',
+  background: '#0070f3', color: '#fff',
+  border: 'none', borderRadius: 6,
+  cursor: 'pointer', fontWeight: 500,
+}
+```
+
+### Prueba esto
+
+- Haz clic en "Enviar" con los campos vacíos — observa que aparece el mensaje "Completa todos los campos correctamente" en rojo
+- Escribe un nombre válido pero deja el email sin `@` (por ejemplo `usuarioemail.com`) y haz clic en "Enviar" — el mismo mensaje de error aparece porque la validación es conjunta
+- Escribe un email con `@` pero sin dominio (por ejemplo `usuario@`) — el formulario se envía igualmente porque `includes('@')` solo verifica la presencia del símbolo
+- Abre la consola del navegador (F12) y envía el formulario con datos válidos — observa que aparece `Datos enviados: { name: '...', email: '...' }` en la consola
+- Cambia `!email.includes('@')` por `!/^[^@]+@[^@]+\.[^@]+$/.test(email)` en la validación — ahora `usuario@` ya no pasa la validación y el error aparece correctamente
+- Añade un tercer campo `phone` con su propio `useState` y agrega la condición `!phone.trim()` a la validación — el formulario ahora requiere los tres campos
+
+---
+
+## Validación manual con TypeScript
+
+Para formularios más complejos conviene separar la lógica de validación
+en una función pura tipada y gestionar el estado de errores y campos
+tocados (touched) por separado.
+
+```tsx
+// src/components/ManualValidationForm.tsx
+
+import { useState } from 'react'
+
+interface FormValues {
+  name:     string
+  email:    string
+  password: string
+}
+
+// Partial — cada campo de error es opcional
+type FormErrors = Partial<Record<keyof FormValues, string>>
+type TouchedFields = Partial<Record<keyof FormValues, boolean>>
+
+// Función pura — recibe valores, retorna errores
+function validateForm(values: FormValues): FormErrors {
+  const errors: FormErrors = {}
+
+  if (!values.name.trim())
+    errors.name = 'El nombre es requerido'
+  else if (values.name.trim().length < 2)
+    errors.name = 'Mínimo 2 caracteres'
+
+  if (!values.email.includes('@'))
+    errors.email = 'Introduce un email válido'
+
+  if (values.password.length < 8)
+    errors.password = 'La contraseña debe tener al menos 8 caracteres'
+
+  return errors
+}
+
+export default function ManualValidationForm() {
+  const [values, setValues] = useState<FormValues>({
+    name: '', email: '', password: '',
+  })
+  const [errors,  setErrors]  = useState<FormErrors>({})
+  const [touched, setTouched] = useState<TouchedFields>({})
+  const [success, setSuccess] = useState(false)
+
+  function handleChange(field: keyof FormValues, value: string) {
+    const newValues = { ...values, [field]: value }
+    setValues(newValues)
+
+    // Valida en tiempo real solo si el campo ya fue tocado (blur)
+    if (touched[field]) {
+      const newErrors = validateForm(newValues)
+      setErrors((prev) => ({ ...prev, [field]: newErrors[field] }))
+    }
+  }
+
+  function handleBlur(field: keyof FormValues) {
+    setTouched((prev) => ({ ...prev, [field]: true }))
+    const fieldErrors = validateForm(values)
+    setErrors((prev) => ({ ...prev, [field]: fieldErrors[field] }))
+  }
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+
+    // Valida todos los campos al enviar
+    const allErrors = validateForm(values)
+
+    if (Object.keys(allErrors).length > 0) {
+      setErrors(allErrors)
+      setTouched({ name: true, email: true, password: true })
+      return
+    }
+
+    setSuccess(true)
+    console.log('Datos válidos:', values)
+  }
+
+  const hasErrors = Object.keys(errors).some(
+    (k) => errors[k as keyof FormErrors]
+  )
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 320 }}
+    >
+      {success && (
+        <div style={{ padding: 12, background: '#dcfce7', borderRadius: 6, color: '#166534' }}>
+          ✅ Formulario enviado correctamente
+        </div>
+      )}
+
+      <Field
+        label="Nombre"
+        value={values.name}
+        error={errors.name}
+        placeholder="Tu nombre completo"
+        onChange={(v) => handleChange('name', v)}
+        onBlur={() => handleBlur('name')}
+      />
+
+      <Field
+        label="Email"
+        type="email"
+        value={values.email}
+        error={errors.email}
+        placeholder="tu@email.com"
+        onChange={(v) => handleChange('email', v)}
+        onBlur={() => handleBlur('email')}
+      />
+
+      <Field
+        label="Contraseña"
+        type="password"
+        value={values.password}
+        error={errors.password}
+        placeholder="Mínimo 8 caracteres"
+        onChange={(v) => handleChange('password', v)}
+        onBlur={() => handleBlur('password')}
+      />
+
+      <button
+        type="submit"
+        disabled={success}
+        style={{
+          padding: '10px', background: '#0070f3', color: '#fff',
+          border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 500,
+          opacity: success ? 0.5 : 1,
+        }}
+      >
+        Registrar
+      </button>
+    </form>
+  )
+}
+
+// Componente auxiliar para evitar repetición
+interface FieldProps {
+  label:       string
+  value:       string
+  error?:      string
+  placeholder?: string
+  type?:       string
+  onChange:    (value: string) => void
+  onBlur:      () => void
+}
+
+function Field({ label, value, error, placeholder, type = 'text', onChange, onBlur }: FieldProps) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <label style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        style={{
+          padding: '8px 12px', fontSize: 14,
+          border: `1px solid ${error ? '#ef4444' : '#d1d5db'}`,
+          borderRadius: 6,
+          outline: error ? '2px solid #fecaca' : 'none',
+        }}
+      />
+      {error && (
+        <p style={{ margin: 0, fontSize: 12, color: '#ef4444' }}>{error}</p>
+      )}
     </div>
   )
 }
@@ -249,146 +289,404 @@ export default function PostList() {
 
 ### Prueba esto
 
-- Cambia `staleTime: 5 * 60 * 1000` a `staleTime: 0` — cambia de tab y vuelve; observa el indicador "Actualizando..." aparecer mientras re-valida en background
-- Cambia `staleTime: 5 * 60 * 1000` a `staleTime: Infinity` — los datos nunca se consideran obsoletos y no se re-validan aunque cambies de tab repetidamente
-- Modifica el array de skeletons de `[...Array(5)]` a `[...Array(10)]` — el estado de carga muestra 10 placeholders en lugar de 5
-- Remueve la condición `isFetching` y su párrafo — cambia de tab y vuelve; los datos se actualizan silenciosamente sin ninguna indicación visual
-- Abre DevTools Network, recarga la página y observa la única petición a `jsonplaceholder`; cambia de tab y vuelve — aparece una segunda petición de re-validación después de los 5 minutos de `staleTime`
-- Añade `refetchInterval: 3000` a las opciones de `useQuery` — observa "Actualizando..." aparecer cada 3 segundos sin interacción del usuario
+- Haz clic en "Registrar" sin tocar ningún campo — observa que los tres errores aparecen al mismo tiempo porque `handleSubmit` valida todos los campos a la vez
+- Haz clic en el campo "Nombre", escribe una letra y luego sal del campo con Tab — observa que el error "Mínimo 2 caracteres" aparece inmediatamente al perder el foco (`onBlur`)
+- Corrige el nombre hasta que sea válido, luego borra una letra — observa que el error reaparece en tiempo real porque el campo ya fue tocado (`touched.name === true`)
+- Cambia `values.password.length < 8` por `values.password.length < 12` en `validateForm` — ahora se requieren mínimo 12 caracteres y el mensaje de error se actualiza
+- Envía el formulario con todos los campos válidos — aparece el banner verde "Formulario enviado correctamente" y el botón se deshabilita (`disabled={success}`)
+- Añade un campo `confirmPassword` al tipo `FormValues` y valida en `validateForm` que coincida con `password` — el error "Las contraseñas no coinciden" aparece si son diferentes
+- Cambia el condicional `if (touched[field])` en `handleChange` por `if (true)` — la validación ocurre en tiempo real desde el primer carácter sin necesidad de salir del campo
 
 ---
 
-### `src/components/PostDetail.tsx`
+## Validación con Zod v4
 
-`queryKey` con parámetros — cada combinación de valores es una entrada
-separada en el caché. `enabled` evita el fetch cuando el ID no es válido.
+Zod valida datos en runtime y genera los tipos TypeScript automáticamente.
+En lugar de escribir tanto la `interface` como la validación por separado,
+el schema es la única fuente de verdad.
 
-```tsx
-// src/components/PostDetail.tsx
-
-import { useQuery } from '@tanstack/react-query'
-import { fetchPost } from '../api/posts'
-
-interface PostDetailProps {
-  postId: number
-}
-
-export default function PostDetail({ postId }: PostDetailProps) {
-  const { data: post, isPending, isError, error } = useQuery({
-    queryKey: ['post', postId],      // clave única por postId
-    queryFn:  () => fetchPost(postId),
-    enabled:  postId > 0,            // no hace fetch si postId es 0 o negativo
-    staleTime: 10 * 60 * 1000,
-  })
-
-  if (!postId) return <p style={{ color: '#9ca3af' }}>Selecciona un post para ver el detalle.</p>
-  if (isPending) return <p>Cargando post #{postId}...</p>
-  if (isError)   return <p style={{ color: '#dc2626' }}>Error: {error.message}</p>
-
-  return (
-    <article style={{ padding: 20, border: '1px solid #e5e7eb', borderRadius: 10 }}>
-      <p style={{ margin: '0 0 4px', fontSize: 12, color: '#9ca3af' }}>Post #{post.id}</p>
-      <h2 style={{ margin: '0 0 12px', fontSize: 18 }}>{post.title}</h2>
-      <p style={{ margin: 0, color: '#374151', lineHeight: 1.6 }}>{post.body}</p>
-    </article>
-  )
-}
+```bash
+npm install zod   # instala Zod v4
 ```
 
-### Prueba esto
-
-- Selecciona el post 1, luego el 2, luego vuelve al 1 — observa en Network que el detalle del post 1 no se re-fetcha; se sirve desde el caché con `queryKey: ['post', 1]`
-- Cambia `enabled: postId > 0` a `enabled: false` — el componente nunca hace fetch aunque `postId` tenga un valor válido; siempre muestra "Cargando post #N..."
-- Cambia `staleTime: 10 * 60 * 1000` a `staleTime: 0` — navega entre posts y vuelve al primero; observa que cada visita dispara una nueva petición de red
-- Añade `retry: 5` a las opciones — modifica `fetchPost` para lanzar un error y observa en consola los 5 reintentos antes de mostrar el mensaje de error
-- Cambia `queryKey: ['post', postId]` a `queryKey: ['post']` — todos los posts comparten la misma entrada del caché; seleccionar post 2 sobreescribe los datos del post 1
-
----
-
-## `useMutation` — crear, actualizar, eliminar
-
-`useMutation` gestiona operaciones que modifican datos en el servidor.
-
-### `src/components/CreatePostForm.tsx`
-
 ```tsx
-// src/components/CreatePostForm.tsx
+// src/components/ZodRegistrationForm.tsx
 
-import { useState }                         from 'react'
-import { useMutation, useQueryClient }      from '@tanstack/react-query'
-import { createPost, type NewPost }         from '../api/posts'
+import { useState } from 'react'
+import { z }        from 'zod'
 
-export default function CreatePostForm() {
-  const queryClient = useQueryClient()
-  const [title, setTitle] = useState('')
-  const [body,  setBody]  = useState('')
+// 1. Definir el schema — es la única fuente de verdad
+const RegisterSchema = z.object({
+  fullName:  z.string().min(2, 'Mínimo 2 caracteres'),
+  email:     z.string().email('Introduce un email válido'),
+  password:  z.string()
+    .min(8, 'Mínimo 8 caracteres')
+    .regex(/[A-Z]/, 'Debe contener al menos una mayúscula')
+    .regex(/[0-9]/, 'Debe contener al menos un número'),
+  confirm:   z.string(),
+  role:      z.enum(['admin', 'editor', 'viewer']),
+  birthYear: z.number({ error: 'Debe ser un número' })
+    .int('Debe ser un año completo')
+    .min(1900, 'Año inválido')
+    .max(new Date().getFullYear() - 18, 'Debes ser mayor de edad'),
+}).refine(
+  (data) => data.password === data.confirm,
+  { message: 'Las contraseñas no coinciden', path: ['confirm'] }
+)
 
-  const mutation = useMutation({
-    mutationFn: (data: NewPost) => createPost(data),
+// 2. Inferir el tipo desde el schema — sin duplicar la interface
+type RegisterFormData = z.infer<typeof RegisterSchema>
 
-    onSuccess: () => {
-      // Invalida el caché de 'posts' — fuerza un re-fetch
-      queryClient.invalidateQueries({ queryKey: ['posts'] })
-      setTitle('')
-      setBody('')
-    },
+// Errores: un string opcional por campo
+type FormErrors = Partial<Record<keyof RegisterFormData, string>>
 
-    onError: (error) => {
-      console.error('Error al crear post:', error.message)
-    },
-  })
+const INITIAL_VALUES: RegisterFormData = {
+  fullName:  '',
+  email:     '',
+  password:  '',
+  confirm:   '',
+  role:      'viewer',
+  birthYear: 2000,
+}
+
+export default function ZodRegistrationForm() {
+  const [values, setValues] = useState<RegisterFormData>(INITIAL_VALUES)
+  const [errors, setErrors] = useState<FormErrors>({})
+  const [success, setSuccess] = useState(false)
+
+  // Tipado genérico — field es una clave válida, value tiene el tipo correcto
+  function handleChange<K extends keyof RegisterFormData>(
+    field: K,
+    value: RegisterFormData[K]
+  ) {
+    setValues((prev) => ({ ...prev, [field]: value }))
+    // Limpia el error del campo al escribir
+    setErrors((prev) => ({ ...prev, [field]: undefined }))
+  }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (!title.trim() || !body.trim()) return
-    mutation.mutate({ title, body, userId: 1 })
+
+    // safeParse — nunca lanza, retorna { success, data } o { success, error }
+    const result = RegisterSchema.safeParse(values)
+
+    if (!result.success) {
+      // Convertir los issues de Zod a nuestro mapa de errores
+      const zodErrors: FormErrors = {}
+      for (const issue of result.error.issues) {
+        const field = issue.path[0] as keyof RegisterFormData
+        // Guarda solo el primer error por campo
+        if (field && !zodErrors[field]) {
+          zodErrors[field] = issue.message
+        }
+      }
+      setErrors(zodErrors)
+      return
+    }
+
+    // result.data está completamente tipado — TypeScript lo sabe
+    console.log('Datos validados:', result.data)
+    setSuccess(true)
   }
 
   return (
     <form
       onSubmit={handleSubmit}
-      style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 400 }}
+      style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 360 }}
     >
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="Título del post"
-        disabled={mutation.isPending}
-        style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6 }}
-      />
-      <textarea
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        placeholder="Contenido del post"
-        rows={3}
-        disabled={mutation.isPending}
-        style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6, resize: 'vertical', fontFamily: 'inherit' }}
+      {success && (
+        <div style={{ padding: 12, background: '#dcfce7', borderRadius: 6, color: '#166534' }}>
+          ✅ Registro completado
+        </div>
+      )}
+
+      {/* Nombre */}
+      <FormField
+        label="Nombre completo"
+        value={values.fullName}
+        error={errors.fullName}
+        placeholder="Ana García"
+        onChange={(v) => handleChange('fullName', v)}
       />
 
-      {mutation.isError && (
-        <p style={{ margin: 0, fontSize: 13, color: '#dc2626' }}>
-          Error: {mutation.error.message}
-        </p>
-      )}
-      {mutation.isSuccess && (
-        <p style={{ margin: 0, fontSize: 13, color: '#16a34a' }}>
-          ✅ Post creado correctamente
-        </p>
-      )}
+      {/* Email */}
+      <FormField
+        label="Correo electrónico"
+        type="email"
+        value={values.email}
+        error={errors.email}
+        placeholder="tu@email.com"
+        onChange={(v) => handleChange('email', v)}
+      />
+
+      {/* Contraseña */}
+      <FormField
+        label="Contraseña"
+        type="password"
+        value={values.password}
+        error={errors.password}
+        placeholder="Mín. 8 caracteres, 1 mayúscula, 1 número"
+        onChange={(v) => handleChange('password', v)}
+      />
+
+      {/* Confirmar contraseña */}
+      <FormField
+        label="Confirmar contraseña"
+        type="password"
+        value={values.confirm}
+        error={errors.confirm}
+        placeholder="Repite la contraseña"
+        onChange={(v) => handleChange('confirm', v)}
+      />
+
+      {/* Rol */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <label style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>Rol</label>
+        <select
+          value={values.role}
+          onChange={(e) =>
+            handleChange('role', e.target.value as RegisterFormData['role'])
+          }
+          style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6 }}
+        >
+          <option value="viewer">Viewer</option>
+          <option value="editor">Editor</option>
+          <option value="admin">Admin</option>
+        </select>
+        {errors.role && <p style={errorStyle}>{errors.role}</p>}
+      </div>
+
+      {/* Año de nacimiento */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <label style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>
+          Año de nacimiento
+        </label>
+        <input
+          type="number"
+          value={values.birthYear}
+          onChange={(e) => handleChange('birthYear', Number(e.target.value))}
+          style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6 }}
+        />
+        {errors.birthYear && <p style={errorStyle}>{errors.birthYear}</p>}
+      </div>
 
       <button
         type="submit"
-        disabled={mutation.isPending || !title.trim()}
         style={{
-          padding: '10px',
-          background: mutation.isPending ? '#93c5fd' : '#0070f3',
-          color: '#fff', border: 'none', borderRadius: 6,
-          cursor: mutation.isPending ? 'not-allowed' : 'pointer',
-          fontWeight: 500,
+          padding: '10px', background: '#0070f3', color: '#fff',
+          border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 500,
         }}
       >
-        {mutation.isPending ? 'Creando...' : 'Crear post'}
+        Registrar
       </button>
+    </form>
+  )
+}
+
+interface FormFieldProps {
+  label:        string
+  value:        string
+  error?:       string
+  placeholder?: string
+  type?:        string
+  onChange:     (value: string) => void
+}
+
+function FormField({ label, value, error, placeholder, type = 'text', onChange }: FormFieldProps) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <label style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{
+          padding: '8px 12px', fontSize: 14,
+          border: `1px solid ${error ? '#ef4444' : '#d1d5db'}`,
+          borderRadius: 6,
+        }}
+      />
+      {error && <p style={errorStyle}>{error}</p>}
+    </div>
+  )
+}
+
+const errorStyle = { margin: 0, fontSize: 12, color: '#ef4444' }
+```
+
+### Prueba esto
+
+- Haz clic en "Registrar" con todos los campos vacíos — observa los mensajes de error de Zod en rojo bajo cada campo: "Mínimo 2 caracteres", "Introduce un email válido", etc.
+- Escribe una contraseña sin mayúsculas como `contraseña1` — el error "Debe contener al menos una mayúscula" aparece al intentar enviar el formulario
+- Escribe una contraseña válida en "Contraseña" pero distinta en "Confirmar contraseña" — el error "Las contraseñas no coinciden" aparece solo bajo el campo de confirmación gracias a `path: ['confirm']` en `refine`
+- Cambia el año de nacimiento a `2010` y haz clic en "Registrar" — aparece el error "Debes ser mayor de edad" porque `2010` es menor que `añoActual - 18`
+- Modifica la regla `.min(8, ...)` de la contraseña a `.min(12, 'Mínimo 12 caracteres')` en el schema — el mensaje de error se actualiza automáticamente sin cambiar nada más en el componente
+- Escribe en el campo "Nombre completo" y luego bórralo — el error desaparece al escribir porque `handleChange` ejecuta `setErrors((prev) => ({ ...prev, [field]: undefined }))` en cada cambio
+- Envía el formulario con todos los datos válidos y abre la consola — observa que `result.data` está completamente tipado: TypeScript infiere los tipos desde el schema de Zod
+
+---
+
+## Formulario de contacto con `useReducer`
+
+Para formularios que necesitan gestionar envío async con múltiples estados,
+`useReducer` es más ordenado que varios `useState` coordinados.
+
+```tsx
+// src/components/ContactForm.tsx
+
+import { useReducer } from 'react'
+
+interface ContactState {
+  name:    string
+  email:   string
+  subject: string
+  message: string
+  errors:  Partial<Record<'name' | 'email' | 'subject' | 'message', string>>
+  status:  'idle' | 'sending' | 'sent' | 'error'
+}
+
+type ContactAction =
+  | { type: 'SET_FIELD'; field: keyof Pick<ContactState, 'name' | 'email' | 'subject' | 'message'>; value: string }
+  | { type: 'SET_ERRORS'; errors: ContactState['errors'] }
+  | { type: 'SENDING' }
+  | { type: 'SENT' }
+  | { type: 'ERROR' }
+  | { type: 'RESET' }
+
+const INITIAL: ContactState = {
+  name: '', email: '', subject: '', message: '',
+  errors: {}, status: 'idle',
+}
+
+function contactReducer(state: ContactState, action: ContactAction): ContactState {
+  switch (action.type) {
+    case 'SET_FIELD':
+      return {
+        ...state,
+        [action.field]: action.value,
+        errors: { ...state.errors, [action.field]: undefined },
+      }
+    case 'SET_ERRORS': return { ...state, errors: action.errors }
+    case 'SENDING':    return { ...state, status: 'sending' }
+    case 'SENT':       return { ...INITIAL, status: 'sent' }
+    case 'ERROR':      return { ...state, status: 'error' }
+    case 'RESET':      return INITIAL
+  }
+}
+
+export default function ContactForm() {
+  const [state, dispatch] = useReducer(contactReducer, INITIAL)
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+
+    const errors: ContactState['errors'] = {}
+    if (!state.name.trim())         errors.name    = 'Requerido'
+    if (!state.email.includes('@')) errors.email   = 'Email inválido'
+    if (!state.subject.trim())      errors.subject = 'Requerido'
+    if (state.message.length < 10)  errors.message = 'Mínimo 10 caracteres'
+
+    if (Object.keys(errors).length > 0) {
+      dispatch({ type: 'SET_ERRORS', errors })
+      return
+    }
+
+    dispatch({ type: 'SENDING' })
+    try {
+      await new Promise((r) => setTimeout(r, 1200)) // simula fetch
+      dispatch({ type: 'SENT' })
+    } catch {
+      dispatch({ type: 'ERROR' })
+    }
+  }
+
+  const isSending = state.status === 'sending'
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 360 }}
+    >
+      {state.status === 'sent' && (
+        <div style={{ padding: 12, background: '#dcfce7', borderRadius: 6, color: '#166534' }}>
+          ✅ Mensaje enviado. Te responderemos pronto.
+        </div>
+      )}
+      {state.status === 'error' && (
+        <div style={{ padding: 12, background: '#fef2f2', borderRadius: 6, color: '#dc2626' }}>
+          ❌ Error al enviar. Inténtalo de nuevo.
+        </div>
+      )}
+
+      {(['name', 'email', 'subject'] as const).map((field) => (
+        <div key={field} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ fontSize: 13, fontWeight: 500, color: '#374151', textTransform: 'capitalize' }}>
+            {field === 'name' ? 'Nombre' : field === 'email' ? 'Email' : 'Asunto'}
+          </label>
+          <input
+            type={field === 'email' ? 'email' : 'text'}
+            value={state[field]}
+            onChange={(e) => dispatch({ type: 'SET_FIELD', field, value: e.target.value })}
+            disabled={isSending}
+            style={{
+              padding: '8px 12px', fontSize: 14,
+              border: `1px solid ${state.errors[field] ? '#ef4444' : '#d1d5db'}`,
+              borderRadius: 6,
+            }}
+          />
+          {state.errors[field] && (
+            <p style={{ margin: 0, fontSize: 12, color: '#ef4444' }}>
+              {state.errors[field]}
+            </p>
+          )}
+        </div>
+      ))}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <label style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>Mensaje</label>
+        <textarea
+          value={state.message}
+          onChange={(e) => dispatch({ type: 'SET_FIELD', field: 'message', value: e.target.value })}
+          disabled={isSending}
+          rows={4}
+          placeholder="Escribe tu mensaje (mínimo 10 caracteres)"
+          style={{
+            padding: '8px 12px', fontSize: 14, resize: 'vertical',
+            border: `1px solid ${state.errors.message ? '#ef4444' : '#d1d5db'}`,
+            borderRadius: 6, fontFamily: 'inherit',
+          }}
+        />
+        {state.errors.message && (
+          <p style={{ margin: 0, fontSize: 12, color: '#ef4444' }}>{state.errors.message}</p>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          type="submit"
+          disabled={isSending}
+          style={{
+            flex: 1, padding: '10px',
+            background: isSending ? '#93c5fd' : '#0070f3',
+            color: '#fff', border: 'none', borderRadius: 6,
+            cursor: isSending ? 'not-allowed' : 'pointer', fontWeight: 500,
+          }}
+        >
+          {isSending ? 'Enviando...' : 'Enviar mensaje'}
+        </button>
+        <button
+          type="button"
+          onClick={() => dispatch({ type: 'RESET' })}
+          disabled={isSending}
+          style={{
+            padding: '10px 16px', background: '#f3f4f6', color: '#6b7280',
+            border: 'none', borderRadius: 6, cursor: 'pointer',
+          }}
+        >
+          Limpiar
+        </button>
+      </div>
     </form>
   )
 }
@@ -396,204 +694,13 @@ export default function CreatePostForm() {
 
 ### Prueba esto
 
-- Completa el formulario y envía — observa el botón cambiar a "Creando..." con fondo azul claro mientras `mutation.isPending` es true
-- Deja el campo título vacío y envía — el botón permanece deshabilitado y la mutation nunca se llama gracias a la validación `!title.trim()`
-- Envía el formulario y observa en Network la petición POST — aunque `jsonplaceholder` no guarda los datos realmente, responde con el post creado y `invalidateQueries` dispara un re-fetch de la lista
-- Elimina `queryClient.invalidateQueries(...)` del `onSuccess` — crea un post y observa que la lista no se actualiza porque el caché de `['posts']` no se invalida
-- Cambia `userId: 1` a `userId: 999` en `mutation.mutate(...)` — el post se crea igualmente; `jsonplaceholder` acepta cualquier userId
-- Añade `onSettled: () => console.log('Mutation terminada')` — observa en consola que se ejecuta tanto en éxito como en error
-
----
-
-### `src/components/PostListWithDelete.tsx`
-
-Eliminación con **actualización optimista** — el item desaparece
-de la UI inmediatamente, antes de que el servidor confirme.
-Si el servidor falla, se revierte el estado anterior.
-
-```tsx
-// src/components/PostListWithDelete.tsx
-
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchPosts, deletePost, type Post }      from '../api/posts'
-
-export default function PostListWithDelete() {
-  const queryClient = useQueryClient()
-
-  const { data: posts, isPending } = useQuery({
-    queryKey: ['posts'],
-    queryFn:  fetchPosts,
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: deletePost,
-
-    // Actualización optimista — se ejecuta ANTES de la llamada al servidor
-    onMutate: async (deletedId: number) => {
-      // Cancela cualquier re-fetch en curso para no sobreescribir el optimismo
-      await queryClient.cancelQueries({ queryKey: ['posts'] })
-
-      // Guarda el estado anterior para rollback si falla
-      const previousPosts = queryClient.getQueryData<Post[]>(['posts'])
-
-      // Actualiza el caché inmediatamente (optimista)
-      queryClient.setQueryData<Post[]>(['posts'], (old) =>
-        old?.filter((post) => post.id !== deletedId) ?? []
-      )
-
-      // Retorna el contexto con el estado previo
-      return { previousPosts }
-    },
-
-    // Rollback si el servidor devuelve error
-    onError: (_err, _deletedId, context) => {
-      if (context?.previousPosts) {
-        queryClient.setQueryData(['posts'], context.previousPosts)
-      }
-    },
-
-    // Revalida siempre al terminar (éxito o error)
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['posts'] })
-    },
-  })
-
-  if (isPending) return <p>Cargando...</p>
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {posts?.map((post) => (
-        <div
-          key={post.id}
-          style={{
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            padding: '10px 16px', border: '1px solid #e5e7eb', borderRadius: 8,
-          }}
-        >
-          <span style={{ fontSize: 14 }}>{post.title}</span>
-          <button
-            onClick={() => deleteMutation.mutate(post.id)}
-            disabled={deleteMutation.isPending}
-            style={{
-              padding: '4px 10px', background: '#fef2f2', color: '#dc2626',
-              border: '1px solid #fecaca', borderRadius: 6,
-              cursor: 'pointer', fontSize: 12,
-            }}
-          >
-            Eliminar
-          </button>
-        </div>
-      ))}
-    </div>
-  )
-}
-```
-
-### Prueba esto
-
-- Haz clic en "Eliminar" en cualquier post — el item desaparece de la lista instantáneamente antes de que el servidor responda; eso es la actualización optimista en `onMutate`
-- Elimina el bloque `onError` completo — si la petición fallara, el item desaparecería permanentemente de la UI sin restaurarse; el rollback es esencial para la UX
-- Elimina `await queryClient.cancelQueries(...)` del `onMutate` — si hay un re-fetch en curso cuando eliminas, puede sobreescribir el estado optimista y el item reaparecería brevemente
-- Añade `console.log('onMutate', deletedId)` en `onMutate` y `console.log('onSettled')` en `onSettled` — observa el orden de ejecución: onMutate → (petición) → onSettled
-- Cambia `onSettled` para que llame a `invalidateQueries` con `queryKey: ['posts', 'paginated', 1]` en lugar de `['posts']` — la lista principal no se re-valida; el caché de paginación tampoco
-
----
-
-## Paginación con `keepPreviousData`
-
-```tsx
-// src/components/PaginatedPosts.tsx
-
-import { useState }                         from 'react'
-import { useQuery, keepPreviousData }       from '@tanstack/react-query'
-import { type Post }                        from '../api/posts'
-
-const PAGE_SIZE = 5
-
-export default function PaginatedPosts() {
-  const [page, setPage] = useState(1)
-
-  const { data: posts, isPending, isPlaceholderData } = useQuery({
-    queryKey: ['posts', 'paginated', page],
-    queryFn:  async () => {
-      const res = await fetch(
-        `https://jsonplaceholder.typicode.com/posts?_page=${page}&_limit=${PAGE_SIZE}`
-      )
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      return res.json() as Promise<Post[]>
-    },
-    // keepPreviousData — muestra datos de la página anterior mientras carga la siguiente
-    // evita el parpadeo de "loading..." en cada cambio de página
-    placeholderData: keepPreviousData,
-    staleTime: 60 * 1000,
-  })
-
-  return (
-    <div style={{ maxWidth: 480 }}>
-      <div
-        style={{
-          display: 'flex', flexDirection: 'column', gap: 8,
-          opacity: isPlaceholderData ? 0.6 : 1,
-          transition: 'opacity 0.2s',
-        }}
-      >
-        {isPending
-          ? <p style={{ color: '#9ca3af' }}>Cargando...</p>
-          : posts?.map((post) => (
-              <div
-                key={post.id}
-                style={{ padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: 8 }}
-              >
-                <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>{post.title}</p>
-              </div>
-            ))
-        }
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
-        <button
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-          disabled={page === 1}
-          style={pageBtn(page === 1)}
-        >
-          ← Anterior
-        </button>
-
-        <span style={{ fontSize: 14, color: '#374151' }}>
-          Página <strong>{page}</strong>
-        </span>
-
-        <button
-          onClick={() => setPage((p) => p + 1)}
-          disabled={isPlaceholderData}
-          style={pageBtn(!!isPlaceholderData)}
-        >
-          Siguiente →
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function pageBtn(disabled: boolean): React.CSSProperties {
-  return {
-    padding: '6px 14px', borderRadius: 6,
-    border: '1px solid #d1d5db',
-    background: disabled ? '#f9fafb' : '#fff',
-    color: disabled ? '#9ca3af' : '#374151',
-    cursor: disabled ? 'not-allowed' : 'pointer',
-  }
-}
-```
-
-### Prueba esto
-
-- Navega a la página 2 y observa la transición — sin parpadeo de "Cargando..." porque `placeholderData: keepPreviousData` mantiene los datos anteriores visibles con `opacity: 0.6`
-- Elimina `placeholderData: keepPreviousData` — navega entre páginas y observa el parpadeo de contenido vacío mientras llegan los nuevos datos
-- Cambia `PAGE_SIZE` de `5` a `2` — cada página muestra solo 2 posts; navega para ver que cada combinación `['posts', 'paginated', page]` es una entrada separada en el caché
-- Cambia `opacity: isPlaceholderData ? 0.6 : 1` a `opacity: isPlaceholderData ? 0.2 : 1` — la transición entre páginas es visualmente más obvia
-- Añade `staleTime: 0` — navega adelante y atrás entre páginas y observa en Network que cada visita a una página ya cacheada dispara una petición de re-validación en background
-- Desactiva el botón "Siguiente" con `disabled={!posts || posts.length < PAGE_SIZE}` en lugar de `disabled={isPlaceholderData}` — el botón se deshabilita cuando la última página tiene menos posts que `PAGE_SIZE`
+- Haz clic en "Enviar mensaje" con todos los campos vacíos — observa que los cuatro errores aparecen a la vez: "Requerido", "Email inválido", "Requerido" y "Mínimo 10 caracteres"
+- Escribe algo en el campo "Nombre" — observa que el error de ese campo desaparece de inmediato porque `SET_FIELD` incluye `errors: { ...state.errors, [field]: undefined }` en el reducer
+- Haz clic en "Enviar mensaje" con datos válidos — el botón cambia a "Enviando..." y se deshabilita durante 1,2 segundos simulando una llamada a la API
+- Tras el envío exitoso, observa que el formulario se limpia automáticamente y aparece el banner verde — esto ocurre porque `SENT` retorna `{ ...INITIAL, status: 'sent' }`, no el estado actual
+- Haz clic en "Limpiar" mientras el formulario tiene texto — todos los campos vuelven a estar vacíos porque `RESET` retorna `INITIAL` directamente
+- Añade un nuevo caso al reducer: `case 'RESET_ERRORS': return { ...state, errors: {} }` y agrega un botón que lo dispare — los errores desaparecen sin resetear los valores
+- Cambia el `setTimeout` de 1200 a 50 y lanza un `throw new Error()` dentro del `try` — el banner rojo "Error al enviar" aparece y el formulario mantiene los datos para reintentarlo
 
 ---
 
@@ -602,33 +709,30 @@ function pageBtn(disabled: boolean): React.CSSProperties {
 ```tsx
 // src/App.tsx
 
-import PostList           from './components/PostList'
-import PostDetail         from './components/PostDetail'
-import CreatePostForm     from './components/CreatePostForm'
-import PostListWithDelete from './components/PostListWithDelete'
-import PaginatedPosts     from './components/PaginatedPosts'
+import BasicForm            from './components/BasicForm'
+import ManualValidationForm from './components/ManualValidationForm'
+import ZodRegistrationForm  from './components/ZodRegistrationForm'
+import ContactForm          from './components/ContactForm'
 
 // ┌──────────────────────────────────────────────────────────────────────┐
 // │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
-// │  1  PostList           — useQuery, lista con caché y skeleton       │
-// │  2  PostDetail         — useQuery con parámetro y enabled           │
-// │  3  CreatePostForm     — useMutation con invalidateQueries          │
-// │  4  PostListWithDelete — useMutation con actualización optimista     │
-// │  5  PaginatedPosts     — paginación con keepPreviousData            │
+// │  1  BasicForm            — formulario controlado básico             │
+// │  2  ManualValidationForm — validación manual con touched            │
+// │  3  ZodRegistrationForm  — validación con Zod v4                   │
+// │  4  ContactForm          — envío async con useReducer               │
 // └──────────────────────────────────────────────────────────────────────┘
 const PASO = 1
 
 export default function App() {
   const content =
-    PASO === 1 ? <PostList /> :
-    PASO === 2 ? <PostDetail postId={1} /> :
-    PASO === 3 ? <CreatePostForm /> :
-    PASO === 4 ? <PostListWithDelete /> :
-    PASO === 5 ? <PaginatedPosts /> :
+    PASO === 1 ? <BasicForm /> :
+    PASO === 2 ? <ManualValidationForm /> :
+    PASO === 3 ? <ZodRegistrationForm /> :
+    PASO === 4 ? <ContactForm /> :
     <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
 
   return (
-    <main style={{ maxWidth: 600, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
+    <main style={{ maxWidth: 420, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
       {content}
     </main>
   )
@@ -637,76 +741,88 @@ export default function App() {
 
 ---
 
-## `queryKey` — la clave del caché
-
-La `queryKey` es un array que identifica de forma única cada dato en el caché.
-Su diseño determina cuándo React Query re-usa datos vs cuándo hace un nuevo fetch.
+## Zod v4 — validators más usados
 
 ```ts
-// Dato global sin parámetros
-queryKey: ['posts']
+import { z } from 'zod'
 
-// Dato con un parámetro — una entrada por userId
-queryKey: ['posts', { userId }]
+z.string()                           // string cualquiera
+z.string().min(2)                    // mínimo 2 caracteres
+z.string().max(100)                  // máximo 100 caracteres
+z.string().email()                   // formato email
+z.string().url()                     // formato URL
+z.string().regex(/[A-Z]/)           // expresión regular
+z.string().trim()                    // elimina espacios al validar
+z.string().optional()               // string | undefined
+z.string().nullable()               // string | null
+z.string().default('valor')          // valor por defecto si undefined
 
-// Dato con múltiples parámetros
-queryKey: ['posts', 'paginated', page]
+z.number()                           // número
+z.number().int()                     // entero
+z.number().min(0)                    // mínimo
+z.number().max(100)                  // máximo
+z.number({ error: 'Mensaje' })       // mensaje de error personalizado en v4
 
-// Detalle de un recurso específico
-queryKey: ['post', postId]
+z.boolean()
+z.date()
+z.enum(['a', 'b', 'c'])             // valores literales
+z.array(z.string())                  // array de strings
+z.object({ ... })                    // objeto con schema
 
-// Dato con filtros
-queryKey: ['products', { category, sort, page }]
+// Refinamiento — validación cruzada entre campos
+schema.refine(
+  (data) => data.password === data.confirm,
+  { message: 'No coinciden', path: ['confirm'] }
+)
+
+// Transformación
+z.string().transform((v) => v.trim().toLowerCase())
+
+// Inferir tipo desde schema
+type MyType = z.infer<typeof MySchema>
 ```
-
-Cuando `invalidateQueries({ queryKey: ['posts'] })` se llama, invalida
-**todas** las queries cuya clave empieza con `['posts']` — incluyendo
-`['posts', 'paginated', 1]`, `['posts', { userId: 5 }]`, etc.
 
 ---
 
-## Diferencias clave v4 → v5
+## Qué estrategia usar según el caso
 
-| v4 | v5 |
+| Caso | Estrategia recomendada |
 |---|---|
-| `isLoading` | `isPending` (canónico) — `isLoading` sigue funcionando |
-| `keepPreviousData: true` en opciones | `placeholderData: keepPreviousData` importado de la librería |
-| `onSuccess`, `onError` en `useQuery` | Eliminados — usa `useEffect` o los callbacks en `useMutation` |
-| `cacheTime` | `gcTime` (garbage collection time) |
-| `status === 'loading'` | `status === 'pending'` |
+| Formulario simple, 1–2 campos | `useState` + validación inline |
+| Formulario mediano con varios campos | `useState` + función `validate()` separada + campo `touched` |
+| Formulario con validaciones complejas o reutilizables | `useState` + **Zod** |
+| Formulario con estados de envío async | `useReducer` + Zod o validación manual |
+| Muchos formularios en la app | Considera **React Hook Form** + Zod |
 
 ---
 
 ## Ejercicios propuestos
 
-1. **`useUsers`** — crea un hook personalizado `useUsers()` que encapsule
-   `useQuery` para fetchear usuarios de `jsonplaceholder.typicode.com/users`.
-   El hook debe retornar `{ users, isPending, isError }` con tipos explícitos.
+1. **`LoginForm` con Zod** — crea un formulario de login con email y contraseña.
+   Valida con Zod: email debe ser válido, contraseña mínimo 6 caracteres.
+   Al enviar, simula una llamada async y muestra el estado de carga.
 
-2. **`useUpdatePost`** — crea un hook personalizado `useUpdatePost(postId)`
-   que encapsule `useMutation` para actualizar un post. En `onSuccess` actualiza
-   el caché del post individual con `queryClient.setQueryData`.
+2. **`ProfileForm` con imagen** — formulario con nombre, bio (máx 200 chars)
+   y un input `type="file"` para avatar. El campo de archivo es no controlado
+   (usa `useRef<HTMLInputElement>`). Valida nombre y bio con Zod.
 
-3. **Búsqueda con debounce** — combina `useDebounce` de página 9 con `useQuery`.
-   El `queryKey` incluye el término debounced. `enabled` es `false` si el término
-   tiene menos de 2 caracteres. Muestra un skeleton mientras carga.
-
----
-
-## Resumen de la página 14
-
-- TanStack Query v5 gestiona automáticamente caché, re-fetching, estados de carga y errores.
-- `QueryClientProvider` envuelve toda la app en `main.tsx` con una instancia de `QueryClient`.
-- `useQuery` con `queryKey` + `queryFn` — la `queryKey` es la identidad del dato en el caché.
-- `isPending` es true solo en la primera carga sin datos en caché. `isFetching` es true en cualquier fetch activo incluyendo re-validaciones.
-- `enabled: false` evita el fetch hasta que la condición sea verdadera — útil para queries que dependen de otro dato.
-- `useMutation` con `onSuccess` llama a `invalidateQueries` para forzar re-fetch de datos relacionados.
-- La actualización optimista en `onMutate` actualiza el caché antes del servidor y hace rollback en `onError`.
-- `keepPreviousData` (importado de la librería) evita el parpadeo de "cargando" entre páginas — muestra datos anteriores mientras llegan los nuevos.
-- En v5 los callbacks `onSuccess`/`onError` de `useQuery` fueron eliminados — usa `useMutation` o `useEffect` para efectos secundarios.
+3. **`SearchForm` con URL** — formulario con un input de búsqueda que sincroniza
+   con `useSearchParams` de React Router. Al enviar, actualiza `?q=valor` en la URL.
 
 ---
 
-> **Siguiente página →** Proyecto integrador: aplicación completa
-> con React Router, Context, TanStack Query, formularios con Zod
-> y tests con Vitest.
+## Resumen de la página 12
+
+- Los formularios controlados vinculan cada campo a un estado de React con `value` + `onChange`.
+- `e.preventDefault()` en `onSubmit` es obligatorio — evita que el navegador recargue la página.
+- El patrón `touched` (campo tocado) permite mostrar errores solo después de que el usuario interactuó con el campo — mejor UX que validar al escribir desde el inicio.
+- Zod v4: `z.object().safeParse()` nunca lanza — retorna `{ success, data }` o `{ success, error }`.
+- `z.infer<typeof Schema>` genera el tipo TypeScript automáticamente — el schema es la única fuente de verdad.
+- En Zod v4 el mensaje de error para tipos base (`z.number()`) va en `{ error: 'mensaje' }`, no en `message`.
+- `useReducer` es ideal para formularios con estados de envío async — centraliza todos los estados en un solo lugar.
+- Para apps con muchos formularios complejos, considera **React Hook Form** + Zod como capa superior.
+
+---
+
+> **Siguiente página →** Testing con Vitest y React Testing Library:
+> testear componentes, hooks y comportamiento del usuario.
