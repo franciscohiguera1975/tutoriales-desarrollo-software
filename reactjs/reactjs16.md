@@ -164,6 +164,41 @@ export default function StatusBadge({ status, label }: StatusBadgeProps) {
 }
 ```
 
+### `src/App.tsx`
+
+```tsx
+// src/App.tsx
+
+import StatusBadge from './components/StatusBadge'
+
+// ┌──────────────────────────────────────────────────────────────────────┐
+// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
+// │  1  StatusBadge  — badge de estado con data-testid                  │
+// │  2  Counter      — contador con step y callback onCountChange       │
+// │  3  SearchInput  — búsqueda con validación mínima y role="alert"    │
+// │  4  UserCard     — tarjeta con aria-label y callbacks               │
+// └──────────────────────────────────────────────────────────────────────┘
+const PASO = 1
+
+export default function App() {
+  const content =
+    PASO === 1 ? (
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <StatusBadge status="active" />
+        <StatusBadge status="inactive" />
+        <StatusBadge status="pending" />
+      </div>
+    ) :
+    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
+
+  return (
+    <main style={{ maxWidth: 600, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
+      {content}
+    </main>
+  )
+}
+```
+
 ### Prueba esto
 
 - Renderiza `<StatusBadge status="active" />` en `App.tsx` y observa el badge verde con el texto "Activo" — confirma que el componente funciona visualmente antes de escribir tests
@@ -221,6 +256,18 @@ export default function Counter({
 }
 ```
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import Counter from './components/Counter'
+```
+
+```tsx
+PASO === 2 ? <Counter initialValue={0} step={1} onCountChange={(n) => console.log('count:', n)} /> :
+```
+
+Cambia `PASO = 2` y guarda.
+
 ### Prueba esto
 
 - Renderiza `<Counter initialValue={5} step={3} />` en `App.tsx` y haz clic en "Incrementar" — el contador pasa de 5 a 8, confirmando que `step` se aplica correctamente
@@ -276,6 +323,18 @@ export default function SearchInput({
 }
 ```
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import SearchInput from './components/SearchInput'
+```
+
+```tsx
+PASO === 3 ? <SearchInput onSearch={(q) => console.log('search:', q)} minLength={2} /> :
+```
+
+Cambia `PASO = 3` y guarda.
+
 ### Prueba esto
 
 - Renderiza `<SearchInput onSearch={(q) => console.log(q)} minLength={3} />` y escribe "ab" antes de hacer clic en "Buscar" — aparece el mensaje "Mínimo 3 caracteres" en el DOM
@@ -316,6 +375,26 @@ export default function UserCard({
 }
 ```
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import UserCard from './components/UserCard'
+```
+
+```tsx
+PASO === 4 ? (
+  <UserCard
+    name="Ana García"
+    email="ana@ejemplo.com"
+    isVerified={true}
+    onEdit={() => console.log('editar')}
+    onDelete={() => console.log('eliminar')}
+  />
+) :
+```
+
+Cambia `PASO = 4` y guarda. Desde aquí puedes volver a cualquier paso anterior cambiando la constante.
+
 ### Prueba esto
 
 - Renderiza `<UserCard name="Ana García" email="ana@ejemplo.com" isVerified={true} onEdit={() => {}} onDelete={() => {}} />` — observa el badge "✓ Verificado" y los dos botones con sus `aria-label` dinámicos
@@ -324,65 +403,6 @@ export default function UserCard({
 - Haz clic en el botón "Editar" de la tarjeta renderizada en `App.tsx` y abre la consola — la función `onEdit` que pasaste se ejecuta, lo que confirma el flujo de callbacks
 - Cambia el `aria-label` del botón de editar de `Editar ${name}` a simplemente `"Editar"` — el test `getByRole('button', { name: 'Editar Ana García' })` falla; esto muestra que los `aria-label` dinámicos hacen los tests más específicos y resistentes a colisiones
 - Añade `data-testid="user-card"` al `<article>` — escribe un test que verifique que el elemento existe en el DOM y que tiene el `aria-label` correcto con `toHaveAttribute`
-
-## Navegador de pasos — `App.tsx`
-
-```tsx
-// src/App.tsx
-
-import StatusBadge from './components/StatusBadge'
-import Counter     from './components/Counter'
-import SearchInput from './components/SearchInput'
-import UserCard    from './components/UserCard'
-
-// ┌──────────────────────────────────────────────────────────────────────┐
-// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
-// │  1  StatusBadge  — badge de estado con data-testid                  │
-// │  2  Counter      — contador con step y callback onCountChange       │
-// │  3  SearchInput  — búsqueda con validación mínima y role="alert"    │
-// │  4  UserCard     — tarjeta con aria-label y callbacks               │
-// └──────────────────────────────────────────────────────────────────────┘
-const PASO = 1
-
-export default function App() {
-  const content =
-    PASO === 1 ? (
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <StatusBadge status="active" />
-        <StatusBadge status="inactive" />
-        <StatusBadge status="pending" />
-      </div>
-    ) :
-    PASO === 2 ? <Counter initialValue={0} step={1} onCountChange={(n) => console.log('count:', n)} /> :
-    PASO === 3 ? <SearchInput onSearch={(q) => console.log('search:', q)} minLength={2} /> :
-    PASO === 4 ? (
-      <UserCard
-        name="Ana García"
-        email="ana@ejemplo.com"
-        isVerified={true}
-        onEdit={() => console.log('editar')}
-        onDelete={() => console.log('eliminar')}
-      />
-    ) :
-    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
-
-  return (
-    <main style={{ maxWidth: 600, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
-      {content}
-    </main>
-  )
-}
-```
-
-### Prueba esto
-
-- Cambia `PASO` a `2` y guarda — el contador aparece; haz clic en "Incrementar" y observa en la consola que `onCountChange` se llama con cada nuevo valor
-- Cambia `PASO` a `3`, escribe "a" en el input y haz clic en "Buscar" — el mensaje "Mínimo 2 caracteres" aparece porque solo escribiste un carácter
-- Cambia `PASO` a `4` y haz clic en "Editar" — aparece `editar` en la consola del navegador; los botones usan `aria-label` dinámico que los tests buscan por rol
-- Pon `PASO = 5` — aparece el mensaje de error en rojo; es la rama `else` del ternario encadenado
-- Vuelve a `PASO = 1` y observa los tres badges con sus estados; cambia `status="active"` por `status="pending"` en el primero — el badge adopta el color amarillo del mapa `config`
-
----
 
 ## Los tests — todos verificados y pasando (20/20)
 

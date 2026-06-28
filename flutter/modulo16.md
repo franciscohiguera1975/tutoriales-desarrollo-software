@@ -1,21 +1,298 @@
 # Tutorial Flutter — Página 16
 ## Módulo 5 · Conectividad
-### Notificaciones locales y push con FCM — construcción incremental
+### Notificaciones locales y push con FCM
 
 ---
 
-## Crear el proyecto
+Las notificaciones son el canal principal para reactivar usuarios: desde recordatorios programados sin internet hasta mensajes push enviados desde un servidor.
+En este módulo combinas `flutter_local_notifications`, Firebase Cloud Messaging y Riverpod para construir un sistema completo y robusto.
+
+## ¿Qué aprenderás?
+
+```
+Característica          | Notificaciones Locales        | Push FCM
+------------------------|-------------------------------|-------------------------------
+¿Quién las envía?       | La propia app en el dispositivo | Servidor externo via Firebase
+¿Cuándo?                | Ahora o en un tiempo programado | Cuando el servidor lo decide
+¿Necesita internet?     | No                            | Sí (FCM requiere conexión)
+Complejidad de setup    | Media (permisos + plugin)     | Alta (Firebase + google-services)
+Casos de uso típicos    | Alarmas, recordatorios, timers | Promociones, alertas, mensajes
+Funciona app cerrada    | Con zonedSchedule + boot recv | Sí (background handler)
+Personalización visual  | Total (canal, sonido, icono)  | Limitada (payload del servidor)
+```
+
+---
+
+## Patrones clave
+
+### Patrón 1: Inicialización de `FlutterLocalNotificationsPlugin` y permisos
+
+```dart
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
+
+// Canal de alta importancia (Android 8+)
+const AndroidNotificationChannel channel = AndroidNotificationChannel(
+  'canal_principal',   // id — debe coincidir en cada show()
+  'Notificaciones',    // nombre visible en ajustes del sistema
+  importance: Importance.high,
+);
+
+Future<void> inicializarNotificaciones() async {
+  // 1. Crear el canal en Android
+  await flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(channel);
+
+  // 2. Configurar init settings por plataforma
+  const initSettings = InitializationSettings(
+    android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+    iOS: DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    ),
+  );
+  await flutterLocalNotificationsPlugin.initialize(initSettings);
+
+  // 3. Solicitar permiso POST_NOTIFICATIONS (Android 13+)
+  await flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.requestNotificationsPermission();
+}
+```
+
+> **Mini-ejercicio ⏱ 5 min:** Llama a `inicializarNotificaciones()` desde `main()` antes de `runApp()`. Luego cambia el nombre del canal a `'Alertas de prueba'` y verifica en Ajustes del emulador (Configuracion → Aplicaciones → tu app → Notificaciones) que el nuevo nombre aparece.
+Añade `playSound: true` en los `DarwinInitializationSettings` para iOS.
+
+---
+
+### Patrón 2: `show()` con `AndroidNotificationDetails` y `DarwinNotificationDetails`
+
+```dart
+Future<void> mostrarNotificacion({
+  required int id,
+  required String titulo,
+  required String cuerpo,
+}) async {
+  const androidDetails = AndroidNotificationDetails(
+    'canal_principal',  // mismo id del canal creado en init
+    'Notificaciones',
+    channelDescription: 'Canal principal de la app',
+    importance: Importance.high,
+    priority: Priority.high,
+    playSound: true,
+    icon: '@mipmap/ic_launcher',
+  );
+
+  const iosDetails = DarwinNotificationDetails(
+    presentAlert: true,
+    presentBadge: true,
+    presentSound: true,
+  );
+
+  const detalles = NotificationDetails(
+    android: androidDetails,
+    iOS: iosDetails,
+  );
+
+  await flutterLocalNotificationsPlugin.show(
+    id,       // id único — usar el mismo id reemplaza la notificación anterior
+    titulo,
+    cuerpo,
+    detalles,
+  );
+}
+```
+
+> **Mini-ejercicio ⏱ 5 min:** Llama a `mostrarNotificacion(id: 1, titulo: 'Hola', cuerpo: 'Primera notificación')`. Luego llama de nuevo con el mismo `id: 1` pero diferente cuerpo. Observa que la notificación anterior se reemplaza, no se acumula. Después prueba con `id: 2` para que aparezcan dos notificaciones simultáneas.
+
+---
+
+### Patrón 3: Notificación programada con `zonedSchedule()` y `TZDateTime`
+
+```dart
+import 'package:timezone/timezone.dart' as tz;
+import 'package:timezone/data/latest_all.dart' as tz;
+
+// Llamar una sola vez al arrancar la app:
+// tz.initializeTimeZones();
+
+Future<void> programarNotificacion({
+  required int id,
+  required String titulo,
+  required String cuerpo,
+  required Duration demoraDesdeAhora,
+}) async {
+  final fechaHora = tz.TZDateTime.now(tz.local).add(demoraDesdeAhora);
+
+  await flutterLocalNotificationsPlugin.zonedSchedule(
+    id,
+    titulo,
+    cuerpo,
+    fechaHora,
+    const NotificationDetails(
+      android: AndroidNotificationDetails(
+        'canal_principal', 'Notificaciones',
+        importance: Importance.high,
+        priority: Priority.high,
+      ),
+      iOS: DarwinNotificationDetails(),
+    ),
+    androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+    uiLocalNotificationDateInterpretation:
+        UILocalNotificationDateInterpretation.absoluteTime,
+  );
+}
+
+// Cancelar una notificación programada:
+// await flutterLocalNotificationsPlugin.cancel(id);
+// Cancelar todas:
+// await flutterLocalNotificationsPlugin.cancelAll();
+```
+
+> **Mini-ejercicio ⏱ 6 min:** Programa 3 notificaciones con `Duration(seconds: 10)`, `Duration(seconds: 20)` y `Duration(seconds: 30)`. Asigna ids 10, 20 y 30. Espera 12 segundos — solo debe llegar la primera. Luego cancela la de id 20 con `cancel(20)` antes de que llegue y verifica que la de 30 sí aparece.
+
+---
+
+### Patrón 4: FCM foreground con `FirebaseMessaging.onMessage.listen()` → notificación local
+
+```dart
+import 'package:firebase_messaging/firebase_messaging.dart';
+
+void configurarFCMForeground(
+    FlutterLocalNotificationsPlugin plugin) {
+  // onMessage solo se dispara cuando la app está en PRIMER PLANO
+  // FCM no muestra notificación visual en foreground por defecto — la mostramos nosotros
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    final notif = message.notification;
+    if (notif != null) {
+      plugin.show(
+        message.hashCode,
+        notif.title ?? 'Nuevo mensaje',
+        notif.body ?? '',
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'canal_principal', 'Notificaciones',
+            importance: Importance.high,
+            priority: Priority.high,
+          ),
+          iOS: DarwinNotificationDetails(),
+        ),
+      );
+    }
+  });
+
+  // Cuando el usuario toca la notificación y la app estaba en background:
+  FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+    // Aquí puedes navegar a una pantalla específica según message.data
+    print('Notificación tocada desde background: ${message.messageId}');
+  });
+}
+```
+
+> **Mini-ejercicio ⏱ 5 min:** Imprime `message.data` dentro del listener de `onMessage`. Envía un mensaje de prueba desde la consola de Firebase con un campo extra `{"pantalla": "detalle"}`. Observa en la consola de Flutter cómo llega ese mapa. Luego añade un `if (message.data['pantalla'] == 'detalle')` que imprima `'Navegar a detalle'`.
+
+---
+
+### Patrón 5: Handler de background/terminated con `@pragma('vm:entry-point')`
+
+```dart
+// IMPORTANTE: debe ser función de NIVEL SUPERIOR, no un método de clase
+// Si está dentro de una clase, FCM no puede invocarla cuando la app está cerrada
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // Reinicializar Firebase porque la app puede no estar iniciada
+  await Firebase.initializeApp();
+  print('Mensaje en background/terminated: ${message.messageId}');
+  // En background, FCM muestra la notificación del sistema automáticamente
+  // si el mensaje incluye el campo "notification" (no solo "data")
+}
+
+// Registrar ANTES de runApp(), en main():
+// FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+```
+
+> **Mini-ejercicio ⏱ 5 min:** Registra el handler en `main()` antes de `runApp()`. Cierra completamente la app (swipe en el task manager del emulador). Envía un push desde Firebase Console con un campo `notification` (titulo + body). Verifica que aparece la notificación del sistema. Luego envía un mensaje solo con `data` (sin `notification`) — observa que FCM no muestra nada visual automáticamente en ese caso.
+
+---
+
+### Patrón 6: `NotifierProvider` para historial de notificaciones
+
+```dart
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+// Modelo simple de notificación recibida
+class NotificacionLocal {
+  final int id;
+  final String titulo;
+  final String cuerpo;
+  final DateTime fechaHora;
+  final TipoNotificacion tipo;
+  final bool leida;
+
+  const NotificacionLocal({
+    required this.id,
+    required this.titulo,
+    required this.cuerpo,
+    required this.fechaHora,
+    required this.tipo,
+    this.leida = false,
+  });
+
+  NotificacionLocal copyWith({bool? leida}) =>
+      NotificacionLocal(
+        id: id, titulo: titulo, cuerpo: cuerpo,
+        fechaHora: fechaHora, tipo: tipo,
+        leida: leida ?? this.leida,
+      );
+}
+
+enum TipoNotificacion { local, push }
+
+// Notifier: gestiona la lista inmutable
+class NotificacionesNotifier extends Notifier<List<NotificacionLocal>> {
+  @override
+  List<NotificacionLocal> build() => [];
+
+  void agregar(NotificacionLocal n) => state = [n, ...state];
+
+  void marcarLeida(int id) {
+    state = [
+      for (final n in state)
+        if (n.id == id) n.copyWith(leida: true) else n,
+    ];
+  }
+
+  void limpiar() => state = [];
+}
+
+final notificacionesProvider =
+    NotifierProvider<NotificacionesNotifier, List<NotificacionLocal>>(
+  NotificacionesNotifier.new,
+);
+```
+
+> **Mini-ejercicio ⏱ 6 min:** Añade un método `eliminar(int id)` al notifier que elimine una notificación por id. En el widget que muestra la lista, añade un `IconButton(icon: Icon(Icons.delete))` en cada `ListTile` que llame a `ref.read(notificacionesProvider.notifier).eliminar(n.id)`. Verifica que el item desaparece de la lista sin recargar la pantalla.
+
+---
+
+## Crea el proyecto
 
 ```bash
-flutter create notificaciones_app
-cd notificaciones_app
+flutter create modulo16_notificaciones
+cd modulo16_notificaciones
 ```
 
 ### `pubspec.yaml`
 
 ```yaml
-name: notificaciones_app
-description: "Demo de notificaciones locales y push FCM"
+name: modulo16_notificaciones
+description: "Notificaciones locales y push FCM con Riverpod"
 publish_to: none
 version: 1.0.0+1
 
@@ -43,11 +320,11 @@ flutter:
 flutter pub get
 ```
 
----
+> La dependencia `timezone` es transitiva de `flutter_local_notifications` — no necesitas declararla explícitamente.
 
-## Configuración nativa
+### Configuración nativa
 
-### Android — `android/app/src/main/AndroidManifest.xml`
+#### Android — `android/app/src/main/AndroidManifest.xml`
 
 Añadir dentro de `<manifest>`, antes de `<application>`:
 
@@ -60,320 +337,295 @@ Añadir dentro de `<manifest>`, antes de `<application>`:
 Añadir dentro de `<application>`:
 
 ```xml
-<!-- Receptor para acciones de notificación -->
+<!-- Receptor para notificaciones programadas -->
 <receiver
     android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
     android:exported="false"/>
 <receiver
     android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
     android:exported="false">
-    <intent-filter>
-        <action android:name="android.intent.action.BOOT_COMPLETED"/>
-    </intent-filter>
+  <intent-filter>
+    <action android:name="android.intent.action.BOOT_COMPLETED"/>
+    <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+    <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+  </intent-filter>
 </receiver>
+
+<!-- FCM: servicio de mensajería en background -->
+<service
+    android:name="com.google.firebase.messaging.FirebaseMessagingService"
+    android:exported="false">
+  <intent-filter>
+    <action android:name="com.google.firebase.MESSAGING_EVENT"/>
+  </intent-filter>
+</service>
 ```
 
-### iOS — `ios/Runner/Info.plist`
-
-Añadir dentro de `<dict>`:
+#### iOS — `ios/Runner/Info.plist`
 
 ```xml
 <key>UIBackgroundModes</key>
 <array>
-    <string>fetch</string>
-    <string>remote-notification</string>
+  <string>fetch</string>
+  <string>remote-notification</string>
 </array>
 ```
 
-### iOS — `ios/Runner/AppDelegate.swift`
+Verificar que `ios/Runner/AppDelegate.swift` no sobreescriba el handler de FCM.
+En proyectos nuevos con Flutter 3.x el `AppDelegate` generado es compatible sin cambios.
 
-```swift
-import UIKit
-import Flutter
-import flutter_local_notifications   // añadir este import
+#### Firebase — `google-services.json`
 
-@main
-@objc class AppDelegate: FlutterAppDelegate {
-  override func application(
-    _ application: UIApplication,
-    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
-  ) -> Bool {
-    // Necesario para notificaciones locales en iOS
-    FlutterLocalNotificationsPlugin.setPluginRegistrantCallback { registry in
-      GeneratedPluginRegistrant.register(with: registry)
-    }
-    if #available(iOS 10.0, *) {
-      UNUserNotificationCenter.current().delegate = self as UNUserNotificationCenterDelegate
-    }
-    GeneratedPluginRegistrant.register(with: self)
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
-  }
+Coloca el archivo descargado desde Firebase Console en `android/app/google-services.json`.
+En el `android/build.gradle` (nivel proyecto) asegúrate de tener:
+
+```groovy
+// android/build.gradle
+dependencies {
+    classpath 'com.google.gms:google-services:4.4.2'
 }
 ```
 
-### Firebase — configuración (para la parte FCM)
+Y en `android/app/build.gradle` (nivel app) al final:
 
-```
-1. Ir a https://console.firebase.google.com
-2. Crear proyecto → Agregar app Android con tu package name
-3. Descargar google-services.json → copiar a android/app/
-4. Crear app iOS con tu bundle id
-5. Descargar GoogleService-Info.plist → copiar a ios/Runner/
-```
-
-**`android/build.gradle`** — añadir en `plugins`:
 ```groovy
-id 'com.google.gms.google-services' version '4.4.2' apply false
+apply plugin: 'com.google.gms.google-services'
 ```
 
-**`android/app/build.gradle`** — añadir en `plugins`:
-```groovy
-id 'com.google.gms.google-services'
-```
+> **Nota de clase:** Si no tienes un proyecto Firebase configurado, los pasos 1 y 2 funcionan sin Firebase. Los pasos 3-5 requieren `google-services.json` real. Puedes dejar un archivo vacío de placeholder y el paso 3 simplemente fallará con un error claro.
 
 ---
 
-## Estructura final del proyecto
+## Selector de pasos
 
-```
-notificaciones_app/
-├── android/
-│   └── app/
-│       ├── build.gradle               ← google-services plugin
-│       ├── google-services.json       ← descargado de Firebase
-│       └── src/main/AndroidManifest.xml
-├── ios/
-│   └── Runner/
-│       ├── AppDelegate.swift
-│       ├── Info.plist
-│       └── GoogleService-Info.plist   ← descargado de Firebase
-├── lib/
-│   ├── main.dart
-│   ├── core/
-│   │   ├── notificaciones_locales.dart   ← servicio de notificaciones locales
-│   │   └── fcm_service.dart              ← servicio FCM
-│   └── features/
-│       ├── pantalla_locales.dart         ← UI notificaciones locales
-│       └── pantalla_push.dart            ← UI notificaciones push
-└── pubspec.yaml
-```
-
----
-
-## Paso 1 — App mínima funcionando
-
-**`lib/main.dart`** — reemplaza todo:
+Cada paso es un archivo `lib/main.dart` independiente y ejecutable.
+Cambia este número para saltar entre pasos:
 
 ```dart
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+// lib/main.dart  ← cambia este número para cada paso
+const int paso = 1;
+```
 
-void main() async {
+---
+
+## Paso 1 — Init + permisos + primera notificación
+
+```dart
+// lib/main.dart
+import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/data/latest_all.dart' as tz;
+
+final FlutterLocalNotificationsPlugin _plugin =
+    FlutterLocalNotificationsPlugin();
+
+const AndroidNotificationChannel _canal = AndroidNotificationChannel(
+  'canal_principal',
+  'Notificaciones',
+  importance: Importance.high,
+);
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const ProviderScope(child: NotificacionesApp()));
+
+  // Inicializar zona horaria (requerido por zonedSchedule en pasos siguientes)
+  tz.initializeTimeZones();
+
+  // Crear canal en Android
+  await _plugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(_canal);
+
+  // Configurar init settings
+  await _plugin.initialize(
+    const InitializationSettings(
+      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      iOS: DarwinInitializationSettings(),
+    ),
+  );
+
+  // Solicitar permisos Android 13+
+  await _plugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.requestNotificationsPermission();
+
+  runApp(const AppPaso1());
 }
 
-class NotificacionesApp extends StatelessWidget {
-  const NotificacionesApp({super.key});
+class AppPaso1 extends StatelessWidget {
+  const AppPaso1({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Notificaciones App',
-      debugShowCheckedModeBanner: false,
+      title: 'Paso 1 — Notificación básica',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
         useMaterial3: true,
       ),
-      home: const PantallaRaiz(),
+      home: const PantallaPaso1(),
     );
   }
 }
 
-class PantallaRaiz extends StatelessWidget {
-  const PantallaRaiz({super.key});
+class PantallaPaso1 extends StatelessWidget {
+  const PantallaPaso1({super.key});
+
+  Future<void> _mostrar() async {
+    await _plugin.show(
+      1,
+      'Hola mundo',
+      'Primera notificación local funcionando',
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'canal_principal', 'Notificaciones',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Notificaciones App')),
-      body: const Center(child: Text('Paso 1 — App funcionando ✅')),
+      appBar: AppBar(title: const Text('Paso 1 — Notificación básica')),
+      body: Center(
+        child: ElevatedButton.icon(
+          onPressed: _mostrar,
+          icon: const Icon(Icons.notifications),
+          label: const Text('Enviar notificación'),
+        ),
+      ),
     );
   }
 }
 ```
 
-```bash
-flutter run
-# Debe mostrar "Paso 1 — App funcionando ✅"
-```
+> **Prueba esto:** Pulsa el botón. En Android verás la notificación en la barra de estado; en iOS en el banner superior.
+> Si no aparece nada, revisa que el emulador tiene activadas las notificaciones para la app (Ajustes → Aplicaciones → modulo16_notificaciones → Notificaciones → Activado).
+
+Salida esperada en consola: ninguna (la notificación es silenciosa en consola). En el dispositivo: banner de notificación con título "Hola mundo".
 
 ---
 
-## Paso 2 — Notificaciones locales: inicialización
-
-Las notificaciones locales se generan **desde la propia app**,
-sin internet ni servidor. Primero inicializa el servicio y verifica
-que el permiso se solicita correctamente:
-
-**Crea `lib/core/notificaciones_locales.dart`:**
+## Paso 2 — Notificaciones programadas con `zonedSchedule`
 
 ```dart
+// lib/main.dart
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/timezone.dart' as tz;
+import 'package:timezone/data/latest_all.dart' as tz_data;
 
-/// Servicio singleton de notificaciones locales.
-/// Debe inicializarse en main() antes de runApp().
-class NotificacionesLocales {
-  NotificacionesLocales._();
-  static final instance = NotificacionesLocales._();
+final FlutterLocalNotificationsPlugin _plugin =
+    FlutterLocalNotificationsPlugin();
 
-  final _plugin = FlutterLocalNotificationsPlugin();
+const AndroidNotificationChannel _canal = AndroidNotificationChannel(
+  'canal_principal', 'Notificaciones',
+  importance: Importance.high,
+);
 
-  // IDs de canales — cada canal tiene su propio sonido/vibración/importancia
-  static const _canalGeneral     = 'canal_general';
-  static const _canalAlertas     = 'canal_alertas';
-  static const _canalDescargas   = 'canal_descargas';
-
-  /// Inicializar el plugin y crear los canales (Android 8+).
-  /// Llamar en main() antes de runApp().
-  Future<void> inicializar() async {
-    // Configuración por plataforma
-    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const ios     = DarwinInitializationSettings(
-      requestAlertPermission:  true,
-      requestBadgePermission:  true,
-      requestSoundPermission:  true,
-    );
-
-    await _plugin.initialize(
-      const InitializationSettings(android: android, iOS: ios),
-      // Callback cuando el usuario toca la notificación
-      onDidReceiveNotificationResponse: _onTap,
-      // Callback cuando toca la notificación con la app cerrada (background)
-      onDidReceiveBackgroundNotificationResponse: _onTapBackground,
-    );
-
-    // Crear canales de Android 8+
-    await _crearCanales();
-  }
-
-  Future<void> _crearCanales() async {
-    final androidPlugin = _plugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
-
-    await androidPlugin?.createNotificationChannel(
-      const AndroidNotificationChannel(
-        _canalGeneral,
-        'General',
-        description:  'Notificaciones generales de la app',
-        importance:   Importance.defaultImportance,
-      ),
-    );
-
-    await androidPlugin?.createNotificationChannel(
-      const AndroidNotificationChannel(
-        _canalAlertas,
-        'Alertas',
-        description: 'Alertas urgentes del sistema',
-        importance:  Importance.high,
-        enableVibration: true,
-      ),
-    );
-
-    await androidPlugin?.createNotificationChannel(
-      const AndroidNotificationChannel(
-        _canalDescargas,
-        'Descargas',
-        description: 'Progreso de descargas',
-        importance:  Importance.low,
-        playSound:   false,
-      ),
-    );
-  }
-
-  /// Solicitar permiso explícito en Android 13+ e iOS
-  Future<bool> solicitarPermiso() async {
-    final androidPlugin = _plugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
-    final iosPlugin = _plugin
-        .resolvePlatformSpecificImplementation<
-            IOSFlutterLocalNotificationsPlugin>();
-
-    final androidOk = await androidPlugin?.requestNotificationsPermission();
-    final iosOk     = await iosPlugin?.requestPermissions(
-      alert: true, badge: true, sound: true,
-    );
-
-    return (androidOk ?? true) || (iosOk ?? true);
-  }
-
-  void _onTap(NotificationResponse response) {
-    print('Notificación tocada: ${response.payload}');
-    // Aquí navegarías a la pantalla correspondiente
-  }
-}
-
-// Función top-level — requerida para el callback en background
-@pragma('vm:entry-point')
-void _onTapBackground(NotificationResponse response) {
-  print('Notificación tocada en background: ${response.payload}');
-}
-```
-
-Actualiza `main.dart` para inicializar el servicio:
-
-```dart
-// lib/main.dart — actualizar main()
-
-import 'core/notificaciones_locales.dart';
-
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  tz_data.initializeTimeZones();  // OBLIGATORIO antes de zonedSchedule
 
-  // Inicializar notificaciones locales antes de runApp
-  await NotificacionesLocales.instance.inicializar();
+  await _plugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(_canal);
 
-  runApp(const ProviderScope(child: NotificacionesApp()));
+  await _plugin.initialize(
+    const InitializationSettings(
+      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      iOS: DarwinInitializationSettings(),
+    ),
+  );
+
+  await _plugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.requestNotificationsPermission();
+
+  runApp(const AppPaso2());
 }
-```
 
-Agrega un botón para verificar el permiso en `PantallaRaiz`:
-
-```dart
-// lib/main.dart — reemplaza PantallaRaiz
-
-class PantallaRaiz extends StatefulWidget {
-  const PantallaRaiz({super.key});
+class AppPaso2 extends StatelessWidget {
+  const AppPaso2({super.key});
 
   @override
-  State<PantallaRaiz> createState() => _PantallaRaizState();
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Paso 2 — Programada',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
+        useMaterial3: true,
+      ),
+      home: const PantallaPaso2(),
+    );
+  }
 }
 
-class _PantallaRaizState extends State<PantallaRaiz> {
-  String _estado = 'Sin verificar';
+class PantallaPaso2 extends StatelessWidget {
+  const PantallaPaso2({super.key});
+
+  Future<void> _programar(int segundos, int id) async {
+    final cuando = tz.TZDateTime.now(tz.local).add(Duration(seconds: segundos));
+    await _plugin.zonedSchedule(
+      id,
+      'Recordatorio programado',
+      'Han pasado $segundos segundos desde que pulsaste el botón',
+      cuando,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'canal_principal', 'Notificaciones',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+    );
+  }
+
+  Future<void> _cancelar(int id) async {
+    await _plugin.cancel(id);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Paso 2 — Inicialización')),
-      body: Center(
+      appBar: AppBar(title: const Text('Paso 2 — Programada')),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(_estado, style: const TextStyle(fontSize: 18)),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              icon:  const Icon(Icons.notifications),
-              label: const Text('Solicitar permiso'),
-              onPressed: () async {
-                final ok = await NotificacionesLocales.instance
-                    .solicitarPermiso();
-                setState(() => _estado = ok
-                    ? '✅ Permiso concedido'
-                    : '❌ Permiso denegado');
-              },
+            ElevatedButton(
+              onPressed: () => _programar(5, 5),
+              child: const Text('Notificación en 5 segundos (id=5)'),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: () => _programar(10, 10),
+              child: const Text('Notificación en 10 segundos (id=10)'),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => _cancelar(10),
+              icon: const Icon(Icons.cancel),
+              label: const Text('Cancelar la de 10 s (id=10)'),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => _plugin.cancelAll(),
+              icon: const Icon(Icons.delete_sweep),
+              label: const Text('Cancelar todas'),
             ),
           ],
         ),
@@ -383,130 +635,128 @@ class _PantallaRaizState extends State<PantallaRaiz> {
 }
 ```
 
-```bash
-flutter run
-# Presiona "Solicitar permiso"
-# En Android 13+ aparece el diálogo del sistema
-# En iOS aparece el diálogo de notificaciones
-# El texto cambia según la respuesta
-```
+> **Prueba esto:** Pulsa "Notificación en 5 segundos" y pon la app en segundo plano. A los 5 s debe aparecer el banner. Luego pulsa la de 10 s, espera 3 s y cancela — no debe llegar ningún banner.
+
+Salida esperada: banner "Recordatorio programado — Han pasado 5 segundos desde que pulsaste el botón" exactamente a los 5 segundos.
 
 ---
 
-## Paso 3 — Enviar notificaciones simples
-
-Ahora añade los métodos de envío al servicio y pruébalos:
-
-**Actualiza `lib/core/notificaciones_locales.dart`** —
-añade estos métodos a la clase `NotificacionesLocales`:
+## Paso 3 — FCM: token + escucha de mensajes en foreground
 
 ```dart
-  // ── Notificación simple ───────────────────────────────────────
+// lib/main.dart
+// REQUISITO: google-services.json en android/app/ y Firebase configurado
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/data/latest_all.dart' as tz;
 
-  Future<void> simple({
-    required int    id,
-    required String titulo,
-    required String cuerpo,
-    String?         payload,     // datos que recibes al tocar
-    String          canal = _canalGeneral,
-  }) async {
-    await _plugin.show(
-      id,
-      titulo,
-      cuerpo,
-      NotificationDetails(
-        android: AndroidNotificationDetails(
-          canal,
-          canal,
-          importance:  Importance.defaultImportance,
-          priority:    Priority.defaultPriority,
-          styleInformation: const BigTextStyleInformation(''),
-        ),
-        iOS: const DarwinNotificationDetails(
-          presentAlert: true,
-          presentSound: true,
-          presentBadge: true,
-        ),
-      ),
-      payload: payload,
-    );
-  }
+final FlutterLocalNotificationsPlugin _plugin =
+    FlutterLocalNotificationsPlugin();
 
-  // ── Notificación con barra de progreso ────────────────────────
+const AndroidNotificationChannel _canal = AndroidNotificationChannel(
+  'canal_principal', 'Notificaciones',
+  importance: Importance.high,
+);
 
-  Future<void> conProgreso({
-    required int    id,
-    required String titulo,
-    required int    progreso,    // 0..100
-    bool            completa = false,
-  }) async {
-    await _plugin.show(
-      id,
-      titulo,
-      completa ? 'Completado' : '$progreso%',
-      NotificationDetails(
-        android: AndroidNotificationDetails(
-          _canalDescargas,
-          'Descargas',
-          importance:       Importance.low,
-          priority:         Priority.low,
-          showProgress:     true,
-          maxProgress:      100,
-          progress:         progreso,
-          indeterminate:    false,
-          onlyAlertOnce:    true,   // no suena en cada update
-          ongoing:          !completa,
-          autoCancel:       completa,
-        ),
-      ),
-    );
-  }
-
-  // ── Cancelar notificaciones ───────────────────────────────────
-
-  Future<void> cancelar(int id)   => _plugin.cancel(id);
-  Future<void> cancelarTodas()    => _plugin.cancelAll();
-```
-
-Prueba los métodos desde `PantallaRaiz`:
-
-```dart
-// lib/main.dart — reemplaza PantallaRaiz
-
-import 'dart:async';
-import 'core/notificaciones_locales.dart';
-
-class PantallaRaiz extends StatefulWidget {
-  const PantallaRaiz({super.key});
-
-  @override
-  State<PantallaRaiz> createState() => _PantallaRaizState();
+// Handler de background — función de nivel superior OBLIGATORIO
+@pragma('vm:entry-point')
+Future<void> _handlerBackground(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  print('[BG] Mensaje recibido: ${message.messageId}');
 }
 
-class _PantallaRaizState extends State<PantallaRaiz> {
-  int _progreso = 0;
-  Timer? _timer;
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  tz.initializeTimeZones();
+  await Firebase.initializeApp();
+
+  // Registrar handler de background ANTES de runApp
+  FirebaseMessaging.onBackgroundMessage(_handlerBackground);
+
+  await _plugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(_canal);
+
+  await _plugin.initialize(
+    const InitializationSettings(
+      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      iOS: DarwinInitializationSettings(),
+    ),
+  );
+
+  // Permiso iOS para FCM
+  await FirebaseMessaging.instance.requestPermission(
+    alert: true, badge: true, sound: true,
+  );
+
+  // Permiso Android 13+
+  await _plugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.requestNotificationsPermission();
+
+  runApp(const AppPaso3());
+}
+
+class AppPaso3 extends StatelessWidget {
+  const AppPaso3({super.key});
 
   @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Paso 3 — FCM',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
+      ),
+      home: const PantallaPaso3(),
+    );
+  }
+}
+
+class PantallaPaso3 extends StatefulWidget {
+  const PantallaPaso3({super.key});
+
+  @override
+  State<PantallaPaso3> createState() => _PantallaPaso3State();
+}
+
+class _PantallaPaso3State extends State<PantallaPaso3> {
+  String _token = 'Obteniendo token...';
+  String _ultimoMensaje = 'Ninguno';
+
+  @override
+  void initState() {
+    super.initState();
+    _obtenerToken();
+    _escucharForeground();
   }
 
-  void _simularDescarga() {
-    _progreso = 0;
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(milliseconds: 400), (t) async {
-      _progreso += 10;
-      if (_progreso >= 100) {
-        t.cancel();
-        await NotificacionesLocales.instance.conProgreso(
-          id: 99, titulo: 'Descarga completa', progreso: 100,
-          completa: true,
-        );
-      } else {
-        await NotificacionesLocales.instance.conProgreso(
-          id: 99, titulo: 'Descargando archivo...', progreso: _progreso,
+  Future<void> _obtenerToken() async {
+    final token = await FirebaseMessaging.instance.getToken();
+    setState(() => _token = token ?? 'No disponible');
+    print('[FCM] Token: $token');
+  }
+
+  void _escucharForeground() {
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      final notif = message.notification;
+      if (notif != null) {
+        setState(() => _ultimoMensaje = '${notif.title}: ${notif.body}');
+        _plugin.show(
+          message.hashCode,
+          notif.title,
+          notif.body,
+          const NotificationDetails(
+            android: AndroidNotificationDetails(
+              'canal_principal', 'Notificaciones',
+              importance: Importance.high, priority: Priority.high,
+            ),
+            iOS: DarwinNotificationDetails(),
+          ),
         );
       }
     });
@@ -514,45 +764,23 @@ class _PantallaRaizState extends State<PantallaRaiz> {
 
   @override
   Widget build(BuildContext context) {
-    final svc = NotificacionesLocales.instance;
     return Scaffold(
-      appBar: AppBar(title: const Text('Paso 3 — Notificaciones')),
+      appBar: AppBar(title: const Text('Paso 3 — FCM Token')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            FilledButton.icon(
-              icon:  const Icon(Icons.notifications),
-              label: const Text('Notificación simple'),
-              onPressed: () => svc.simple(
-                id:     1,
-                titulo: 'Hola desde Flutter',
-                cuerpo: 'Esta es una notificación local simple',
-              ),
-            ),
+            const Text('Token FCM del dispositivo:',
+                style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            FilledButton.icon(
-              icon:  const Icon(Icons.warning_amber),
-              label: const Text('Notificación de alerta'),
-              onPressed: () => svc.simple(
-                id:     2,
-                titulo: '⚠️ Alerta del sistema',
-                cuerpo: 'CPU al 98% — revisa el servidor prod-01',
-                canal:  'canal_alertas',
-              ),
-            ),
+            SelectableText(_token,
+                style: const TextStyle(fontSize: 11, fontFamily: 'monospace')),
+            const SizedBox(height: 24),
+            const Text('Último mensaje FCM en foreground:',
+                style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            FilledButton.tonal(
-              onPressed: _simularDescarga,
-              child: const Text('Simular descarga (con progreso)'),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              icon:  const Icon(Icons.delete_outline),
-              label: const Text('Cancelar todas'),
-              onPressed: () => svc.cancelarTodas(),
-            ),
+            Text(_ultimoMensaje, style: const TextStyle(fontSize: 14)),
           ],
         ),
       ),
@@ -561,452 +789,153 @@ class _PantallaRaizState extends State<PantallaRaiz> {
 }
 ```
 
-```bash
-flutter run
-# Presiona "Notificación simple" → aparece en la barra del sistema
-# Presiona "Alerta" → aparece con más prominencia (canal_alertas)
-# Presiona "Simular descarga" → barra de progreso que avanza en tiempo real
-# Presiona "Cancelar todas" → desaparecen todas las notificaciones
-```
+> **Prueba esto:** Ejecuta la app. Copia el token que aparece en pantalla (o en la consola de Flutter). Ve a Firebase Console → Cloud Messaging → Enviar mensaje de prueba → pega el token como "dispositivo de destino". La app debe mostrar el banner Y actualizar el texto "Último mensaje FCM en foreground".
+
+Salida esperada en consola: `[FCM] Token: f3Kz9...` (cadena larga única por dispositivo/instalación).
 
 ---
 
-## Paso 4 — Notificaciones con acciones
-
-Las acciones permiten al usuario responder desde la notificación
-sin abrir la app:
-
-**Actualiza `lib/core/notificaciones_locales.dart`** —
-añade el método `conAcciones`:
+## Paso 4 — Riverpod: historial de notificaciones FCM
 
 ```dart
-  // ── Notificación con botones de acción ────────────────────────
-
-  Future<void> conAcciones({
-    required int    id,
-    required String titulo,
-    required String cuerpo,
-    required List<({String id, String label, IconData? icono})> acciones,
-    String?         payload,
-  }) async {
-    final androidAcciones = acciones.map((a) =>
-      AndroidNotificationAction(
-        a.id,
-        a.label,
-        showsUserInterface: false,   // true = abre la app al presionar
-        cancelNotification: true,
-      ),
-    ).toList();
-
-    await _plugin.show(
-      id,
-      titulo,
-      cuerpo,
-      NotificationDetails(
-        android: AndroidNotificationDetails(
-          _canalAlertas,
-          'Alertas',
-          importance:  Importance.high,
-          priority:    Priority.high,
-          actions:     androidAcciones,
-        ),
-        iOS: DarwinNotificationDetails(
-          categoryIdentifier: 'acciones_$id',
-        ),
-      ),
-      payload: payload,
-    );
-  }
-```
-
-Prueba en `PantallaRaiz` — añade este botón al `Column` del paso anterior:
-
-```dart
-// Añadir al Column de PantallaRaiz en main.dart
-
-const SizedBox(height: 8),
-FilledButton.icon(
-  icon:  const Icon(Icons.task_alt),
-  label: const Text('Notificación con acciones'),
-  onPressed: () => svc.conAcciones(
-    id:      3,
-    titulo:  'Nuevo ticket de soporte',
-    cuerpo:  'Servidor prod-01 reporta latencia > 500ms',
-    payload: 'ticket:1234',
-    acciones: [
-      (id: 'RESOLVER',  label: 'Resolver', icono: null),
-      (id: 'IGNORAR',   label: 'Ignorar',  icono: null),
-    ],
-  ),
-),
-```
-
-```bash
-flutter run
-# Presiona "Notificación con acciones"
-# En la barra de notificaciones expande la notificación
-# Verás los botones "Resolver" e "Ignorar"
-# Al presionar, la notificación se descarta (cancelNotification: true)
-```
-
----
-
-## Paso 5 — Notificaciones programadas
-
-```dart
-// Añadir a lib/core/notificaciones_locales.dart
-// Agregar import al inicio del archivo:
-// import 'package:timezone/timezone.dart' as tz;
-// import 'package:timezone/data/latest.dart' as tz_data;
-
-  // ── Notificación programada ───────────────────────────────────
-  // Requiere el paquete timezone — añadir a pubspec.yaml:
-  // timezone: ^0.9.4
-
-  Future<void> programada({
-    required int      id,
-    required String   titulo,
-    required String   cuerpo,
-    required Duration en,         // cuánto tiempo desde ahora
-    String?           payload,
-  }) async {
-    final ahora    = tz.TZDateTime.now(tz.local);
-    final momento  = ahora.add(en);
-
-    await _plugin.zonedSchedule(
-      id,
-      titulo,
-      cuerpo,
-      momento,
-      NotificationDetails(
-        android: AndroidNotificationDetails(
-          _canalGeneral, 'General',
-          importance: Importance.defaultImportance,
-        ),
-        iOS: const DarwinNotificationDetails(),
-      ),
-      androidScheduleMode:
-          AndroidScheduleMode.exactAllowWhileIdle,
-      payload: payload,
-    );
-  }
-
-  Future<void> cancelarProgramada(int id) => _plugin.cancel(id);
-```
-
-Para usar `timezone`, añade en `pubspec.yaml`:
-```yaml
-  timezone: ^0.9.4
-```
-
-Y en `main()` inicializa los datos de zona horaria:
-```dart
-// lib/main.dart — actualizar main()
-import 'package:timezone/data/latest.dart' as tz_data;
-
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  tz_data.initializeTimeZones();   // necesario para zonedSchedule
-  await NotificacionesLocales.instance.inicializar();
-  runApp(const ProviderScope(child: NotificacionesApp()));
-}
-```
-
-Prueba añadiendo este botón:
-
-```dart
-// En el Column de PantallaRaiz
-
-const SizedBox(height: 8),
-FilledButton.tonal(
-  onPressed: () {
-    svc.programada(
-      id:     10,
-      titulo: '⏰ Recordatorio',
-      cuerpo: 'Han pasado 5 segundos',
-      en:     const Duration(seconds: 5),
-    );
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Notificación programada en 5 segundos'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  },
-  child: const Text('Programar en 5 segundos'),
-),
-```
-
-```bash
-flutter run
-# Presiona "Programar en 5 segundos"
-# El Snackbar confirma que quedó programada
-# Minimiza la app o bloquea la pantalla
-# En 5 segundos aparece la notificación
-```
-
----
-
-## Paso 6 — Push con Firebase Cloud Messaging (FCM)
-
-Las notificaciones push llegan **desde un servidor remoto** a través
-de Firebase. Requieren la configuración de Firebase del inicio de la página.
-
-**Crea `lib/core/fcm_service.dart`:**
-
-```dart
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'notificaciones_locales.dart';
-
-/// Servicio FCM — recibe mensajes push y los muestra como notificaciones locales.
-/// Debe inicializarse en main() después de Firebase.initializeApp().
-class FcmService {
-  FcmService._();
-  static final instance = FcmService._();
-
-  final _messaging = FirebaseMessaging.instance;
-
-  /// Inicializar FCM y configurar los handlers de mensajes.
-  Future<void> inicializar() async {
-    // 1. Solicitar permiso de notificaciones (iOS — en Android ya se hizo)
-    await _messaging.requestPermission(
-      alert:      true,
-      announcement: false,
-      badge:      true,
-      carPlay:    false,
-      criticalAlert: false,
-      provisional: false,
-      sound:      true,
-    );
-
-    // 2. Configurar presentación en primer plano (iOS)
-    await FirebaseMessaging.instance
-        .setForegroundNotificationPresentationOptions(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-
-    // 3. Handler para mensajes en PRIMER PLANO
-    // En Android FCM NO muestra la notificación automáticamente en primer plano
-    // — hay que mostrarla manualmente con flutter_local_notifications
-    FirebaseMessaging.onMessage.listen(_onMensajePrimerPlano);
-
-    // 4. Handler cuando el usuario toca la notificación con la app en FONDO
-    FirebaseMessaging.onMessageOpenedApp.listen(_onAbrirDesdeBackground);
-
-    // 5. Verificar si la app se abrió desde una notificación (app cerrada)
-    final mensajeInicial = await _messaging.getInitialMessage();
-    if (mensajeInicial != null) {
-      _procesarMensaje(mensajeInicial, origen: 'inicial');
-    }
-
-    // 6. Obtener y registrar el token del dispositivo
-    final token = await obtenerToken();
-    print('🔑 Token FCM: $token');
-    // En producción: enviar este token a tu backend
-  }
-
-  // Mensaje recibido con la app en PRIMER PLANO
-  Future<void> _onMensajePrimerPlano(RemoteMessage mensaje) async {
-    print('📨 FCM primer plano: ${mensaje.messageId}');
-
-    final notif = mensaje.notification;
-    if (notif != null) {
-      // Mostrar como notificación local porque FCM no la muestra solo en primer plano
-      await NotificacionesLocales.instance.simple(
-        id:     mensaje.hashCode,
-        titulo: notif.title ?? 'Nuevo mensaje',
-        cuerpo: notif.body  ?? '',
-        // Pasar los datos para el handler de tap
-        payload: mensaje.data['pantalla'],
-      );
-    }
-    _procesarMensaje(mensaje, origen: 'primer_plano');
-  }
-
-  // App en fondo — usuario toca la notificación
-  void _onAbrirDesdeBackground(RemoteMessage mensaje) {
-    print('📨 FCM abierto desde fondo: ${mensaje.messageId}');
-    _procesarMensaje(mensaje, origen: 'background');
-  }
-
-  // Lógica compartida para procesar cualquier mensaje
-  void _procesarMensaje(RemoteMessage mensaje, {required String origen}) {
-    final data     = mensaje.data;
-    final pantalla = data['pantalla'] as String?;
-    final payload  = data['payload']  as String?;
-
-    print('Origen: $origen | Pantalla: $pantalla | Payload: $payload');
-
-    // Aquí navegarías según la pantalla usando GoRouter o Navigator:
-    // if (pantalla == 'alertas') context.go('/alertas');
-  }
-
-  /// Obtener el token FCM del dispositivo.
-  Future<String?> obtenerToken() => _messaging.getToken();
-
-  /// Suscribirse a un topic — todos los dispositivos suscritos
-  /// reciben los mensajes enviados a ese topic
-  Future<void> suscribirA(String topic) async {
-    await _messaging.subscribeToTopic(topic);
-    print('✅ Suscrito a topic: $topic');
-  }
-
-  Future<void> desuscribirDe(String topic) async {
-    await _messaging.unsubscribeFromTopic(topic);
-    print('🚫 Desuscrito de topic: $topic');
-  }
-}
-
-/// Handler de mensajes en SEGUNDO PLANO — función top-level obligatoria.
-/// Se ejecuta en un isolate separado — no puede acceder a estado de la app.
-@pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage mensaje) async {
-  // No necesitas mostrar nada aquí — FCM lo hace automáticamente en segundo plano
-  print('📨 FCM background handler: ${mensaje.messageId}');
-}
-```
-
-Actualiza `main.dart` para inicializar Firebase y FCM:
-
-```dart
-// lib/main.dart — versión completa con Firebase
-
+// lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:timezone/data/latest.dart' as tz_data;
-import 'core/notificaciones_locales.dart';
-import 'core/fcm_service.dart';
-import 'features/pantalla_locales.dart';
-import 'features/pantalla_push.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/data/latest_all.dart' as tz;
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+// ---------- Modelo ----------
+enum TipoNotificacion { local, push }
 
-  // Timezone para notificaciones programadas
-  tz_data.initializeTimeZones();
+class NotificacionLocal {
+  final int id;
+  final String titulo;
+  final String cuerpo;
+  final DateTime fechaHora;
+  final TipoNotificacion tipo;
+  final bool leida;
 
-  // Firebase debe inicializarse antes de FCM
-  await Firebase.initializeApp();
+  const NotificacionLocal({
+    required this.id,
+    required this.titulo,
+    required this.cuerpo,
+    required this.fechaHora,
+    required this.tipo,
+    this.leida = false,
+  });
 
-  // Registrar handler de background ANTES de runApp
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-
-  // Notificaciones locales
-  await NotificacionesLocales.instance.inicializar();
-
-  // FCM
-  await FcmService.instance.inicializar();
-
-  runApp(const ProviderScope(child: NotificacionesApp()));
+  NotificacionLocal copyWith({bool? leida}) => NotificacionLocal(
+        id: id, titulo: titulo, cuerpo: cuerpo,
+        fechaHora: fechaHora, tipo: tipo,
+        leida: leida ?? this.leida,
+      );
 }
 
-// La función de background debe ser top-level (fuera de cualquier clase)
+// ---------- Notifier ----------
+class NotificacionesNotifier extends Notifier<List<NotificacionLocal>> {
+  @override
+  List<NotificacionLocal> build() => [];
+
+  void agregar(NotificacionLocal n) => state = [n, ...state];
+  void marcarLeida(int id) {
+    state = [
+      for (final n in state)
+        if (n.id == id) n.copyWith(leida: true) else n,
+    ];
+  }
+  void limpiar() => state = [];
+}
+
+final notificacionesProvider =
+    NotifierProvider<NotificacionesNotifier, List<NotificacionLocal>>(
+  NotificacionesNotifier.new,
+);
+
+// ---------- Infraestructura global ----------
+final FlutterLocalNotificationsPlugin _plugin =
+    FlutterLocalNotificationsPlugin();
+
 @pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage mensaje) async {
+Future<void> _handlerBackground(RemoteMessage message) async {
   await Firebase.initializeApp();
-  print('Background FCM: ${mensaje.messageId}');
 }
 
-class NotificacionesApp extends StatelessWidget {
-  const NotificacionesApp({super.key});
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  tz.initializeTimeZones();
+  await Firebase.initializeApp();
+  FirebaseMessaging.onBackgroundMessage(_handlerBackground);
+
+  await _plugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(const AndroidNotificationChannel(
+          'canal_principal', 'Notificaciones',
+          importance: Importance.high));
+
+  await _plugin.initialize(const InitializationSettings(
+    android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+    iOS: DarwinInitializationSettings(),
+  ));
+
+  await FirebaseMessaging.instance.requestPermission();
+  await _plugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.requestNotificationsPermission();
+
+  runApp(const ProviderScope(child: AppPaso4()));
+}
+
+// ---------- App ----------
+class AppPaso4 extends StatelessWidget {
+  const AppPaso4({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Notificaciones',
-      debugShowCheckedModeBanner: false,
+      title: 'Paso 4 — Riverpod + FCM',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.orange),
         useMaterial3: true,
       ),
-      home: const PantallaRaiz(),
+      home: const PantallaPaso4(),
     );
   }
 }
 
-class PantallaRaiz extends ConsumerWidget {
-  const PantallaRaiz({super.key});
+class PantallaPaso4 extends ConsumerStatefulWidget {
+  const PantallaPaso4({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final indice = ref.watch(_tabProvider);
-    return Scaffold(
-      body: switch (indice) {
-        0 => const PantallaLocales(),
-        1 => const PantallaPush(),
-        _ => const PantallaLocales(),
-      },
-      bottomNavigationBar: NavigationBar(
-        selectedIndex:         indice,
-        onDestinationSelected: (i) =>
-            ref.read(_tabProvider.notifier).state = i,
-        destinations: const [
-          NavigationDestination(
-            icon:         Icon(Icons.notifications_outlined),
-            selectedIcon: Icon(Icons.notifications),
-            label:        'Locales',
-          ),
-          NavigationDestination(
-            icon:         Icon(Icons.cloud_outlined),
-            selectedIcon: Icon(Icons.cloud),
-            label:        'Push',
-          ),
-        ],
-      ),
-    );
-  }
+  ConsumerState<PantallaPaso4> createState() => _PantallaPaso4State();
 }
 
-final _tabProvider = StateProvider<int>((ref) => 0);
-```
-
----
-
-## Paso 7 — Pantallas finales
-
-**Crea `lib/features/pantalla_locales.dart`:**
-
-```dart
-import 'dart:async';
-import 'package:flutter/material.dart';
-import '../core/notificaciones_locales.dart';
-
-class PantallaLocales extends StatefulWidget {
-  const PantallaLocales({super.key});
-
+class _PantallaPaso4State extends ConsumerState<PantallaPaso4> {
   @override
-  State<PantallaLocales> createState() => _PantallaLocalesState();
-}
-
-class _PantallaLocalesState extends State<PantallaLocales> {
-  final _svc      = NotificacionesLocales.instance;
-  int   _progreso = 0;
-  Timer? _timer;
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  void _simularDescarga() {
-    _progreso = 0;
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(milliseconds: 300), (t) async {
-      _progreso += 10;
-      if (_progreso >= 100) {
-        t.cancel();
-        await _svc.conProgreso(
-          id: 99, titulo: '✅ Descarga completa',
-          progreso: 100, completa: true,
+  void initState() {
+    super.initState();
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      final notif = message.notification;
+      if (notif != null) {
+        final n = NotificacionLocal(
+          id: message.hashCode,
+          titulo: notif.title ?? 'Sin título',
+          cuerpo: notif.body ?? '',
+          fechaHora: DateTime.now(),
+          tipo: TipoNotificacion.push,
         );
-      } else {
-        await _svc.conProgreso(
-          id: 99, titulo: 'Descargando...', progreso: _progreso,
+        ref.read(notificacionesProvider.notifier).agregar(n);
+        _plugin.show(
+          n.id, n.titulo, n.cuerpo,
+          const NotificationDetails(
+            android: AndroidNotificationDetails(
+                'canal_principal', 'Notificaciones',
+                importance: Importance.high, priority: Priority.high),
+            iOS: DarwinNotificationDetails(),
+          ),
         );
       }
     });
@@ -1014,94 +943,364 @@ class _PantallaLocalesState extends State<PantallaLocales> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
+    final notificaciones = ref.watch(notificacionesProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notificaciones locales'),
-        backgroundColor: cs.primaryContainer,
+        title: const Text('Paso 4 — Historial FCM'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_sweep),
+            onPressed: () =>
+                ref.read(notificacionesProvider.notifier).limpiar(),
+          ),
+        ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: notificaciones.isEmpty
+          ? const Center(
+              child: Text('Envía un push desde Firebase Console',
+                  style: TextStyle(color: Colors.grey)))
+          : ListView.builder(
+              itemCount: notificaciones.length,
+              itemBuilder: (context, i) {
+                final n = notificaciones[i];
+                return ListTile(
+                  leading: Icon(
+                    n.leida ? Icons.mark_email_read : Icons.notifications,
+                    color: n.leida ? Colors.grey : Colors.orange,
+                  ),
+                  title: Text(n.titulo,
+                      style: TextStyle(
+                          fontWeight: n.leida
+                              ? FontWeight.normal
+                              : FontWeight.bold)),
+                  subtitle: Text(n.cuerpo),
+                  trailing: Text(
+                    '${n.fechaHora.hour}:${n.fechaHora.minute.toString().padLeft(2, '0')}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  onTap: () =>
+                      ref.read(notificacionesProvider.notifier).marcarLeida(n.id),
+                );
+              },
+            ),
+    );
+  }
+}
+```
+
+> **Prueba esto:** Envía 3 mensajes push desde Firebase Console. Deben aparecer en la lista con fondo en negrita. Toca uno — el ícono cambia y el texto vuelve a peso normal (marcado como leído). Pulsa el ícono de papelera en el `AppBar` — la lista se vacía.
+
+Salida esperada: lista de tarjetas con la hora de recepción, marcado visual de leído/no leído.
+
+---
+
+## Paso 5 — App completa con `NavigationBar`: locales + push
+
+```dart
+// lib/main.dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/timezone.dart' as tz;
+import 'package:timezone/data/latest_all.dart' as tz_data;
+
+// ---------- Modelo ----------
+enum TipoNotificacion { local, push }
+
+class NotificacionLocal {
+  final int id;
+  final String titulo;
+  final String cuerpo;
+  final DateTime fechaHora;
+  final TipoNotificacion tipo;
+  final bool leida;
+
+  const NotificacionLocal({
+    required this.id,
+    required this.titulo,
+    required this.cuerpo,
+    required this.fechaHora,
+    required this.tipo,
+    this.leida = false,
+  });
+
+  NotificacionLocal copyWith({bool? leida}) => NotificacionLocal(
+        id: id, titulo: titulo, cuerpo: cuerpo,
+        fechaHora: fechaHora, tipo: tipo,
+        leida: leida ?? this.leida,
+      );
+}
+
+// ---------- Provider ----------
+class NotificacionesNotifier extends Notifier<List<NotificacionLocal>> {
+  @override
+  List<NotificacionLocal> build() => [];
+  void agregar(NotificacionLocal n) => state = [n, ...state];
+  void marcarLeida(int id) {
+    state = [
+      for (final n in state)
+        if (n.id == id) n.copyWith(leida: true) else n,
+    ];
+  }
+  void limpiar() => state = [];
+}
+
+final notificacionesProvider =
+    NotifierProvider<NotificacionesNotifier, List<NotificacionLocal>>(
+  NotificacionesNotifier.new,
+);
+
+final tabProvider = StateProvider<int>((ref) => 0);
+
+// ---------- Infraestructura ----------
+final FlutterLocalNotificationsPlugin _plugin =
+    FlutterLocalNotificationsPlugin();
+
+const AndroidNotificationChannel _canal = AndroidNotificationChannel(
+  'canal_principal', 'Notificaciones',
+  importance: Importance.high,
+);
+
+@pragma('vm:entry-point')
+Future<void> _handlerBackground(RemoteMessage message) async {
+  await Firebase.initializeApp();
+}
+
+Future<void> _mostrar(int id, String titulo, String cuerpo) async {
+  await _plugin.show(
+    id, titulo, cuerpo,
+    const NotificationDetails(
+      android: AndroidNotificationDetails(
+          'canal_principal', 'Notificaciones',
+          importance: Importance.high, priority: Priority.high),
+      iOS: DarwinNotificationDetails(),
+    ),
+  );
+}
+
+Future<void> _programar(int id, String titulo, String cuerpo,
+    Duration demora) async {
+  await _plugin.zonedSchedule(
+    id, titulo, cuerpo,
+    tz.TZDateTime.now(tz.local).add(demora),
+    const NotificationDetails(
+      android: AndroidNotificationDetails(
+          'canal_principal', 'Notificaciones',
+          importance: Importance.high, priority: Priority.high),
+      iOS: DarwinNotificationDetails(),
+    ),
+    androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+    uiLocalNotificationDateInterpretation:
+        UILocalNotificationDateInterpretation.absoluteTime,
+  );
+}
+
+// ---------- main ----------
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  tz_data.initializeTimeZones();
+  await Firebase.initializeApp();
+  FirebaseMessaging.onBackgroundMessage(_handlerBackground);
+
+  await _plugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(_canal);
+
+  await _plugin.initialize(const InitializationSettings(
+    android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+    iOS: DarwinInitializationSettings(),
+  ));
+
+  await FirebaseMessaging.instance.requestPermission(
+      alert: true, badge: true, sound: true);
+  await _plugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.requestNotificationsPermission();
+
+  runApp(const ProviderScope(child: NotificacionesApp()));
+}
+
+// ---------- App raíz ----------
+class NotificacionesApp extends StatelessWidget {
+  const NotificacionesApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Notificaciones — Módulo 16',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+        useMaterial3: true,
+      ),
+      home: const PantallaRaiz(),
+    );
+  }
+}
+
+class PantallaRaiz extends ConsumerStatefulWidget {
+  const PantallaRaiz({super.key});
+
+  @override
+  ConsumerState<PantallaRaiz> createState() => _PantallaRaizState();
+}
+
+class _PantallaRaizState extends ConsumerState<PantallaRaiz> {
+  @override
+  void initState() {
+    super.initState();
+    // Escuchar mensajes FCM en foreground
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      final notif = message.notification;
+      if (notif != null) {
+        final n = NotificacionLocal(
+          id: message.hashCode,
+          titulo: notif.title ?? 'Push recibido',
+          cuerpo: notif.body ?? '',
+          fechaHora: DateTime.now(),
+          tipo: TipoNotificacion.push,
+        );
+        ref.read(notificacionesProvider.notifier).agregar(n);
+        _mostrar(n.id, n.titulo, n.cuerpo);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tabActual = ref.watch(tabProvider);
+    const tabs = [
+      PantallaLocales(),
+      PantallaPush(),
+    ];
+    return Scaffold(
+      body: tabs[tabActual],
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: tabActual,
+        onDestinationSelected: (i) =>
+            ref.read(tabProvider.notifier).state = i,
+        destinations: const [
+          NavigationDestination(
+              icon: Icon(Icons.notifications_outlined),
+              selectedIcon: Icon(Icons.notifications),
+              label: 'Locales'),
+          NavigationDestination(
+              icon: Icon(Icons.cloud_outlined),
+              selectedIcon: Icon(Icons.cloud),
+              label: 'Push FCM'),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------- Tab 0: Locales ----------
+class PantallaLocales extends ConsumerStatefulWidget {
+  const PantallaLocales({super.key});
+
+  @override
+  ConsumerState<PantallaLocales> createState() => _PantallaLocalesState();
+}
+
+class _PantallaLocalesState extends ConsumerState<PantallaLocales> {
+  int _contadorId = 100;
+
+  Future<void> _enviarAhora() async {
+    final id = _contadorId++;
+    final n = NotificacionLocal(
+      id: id,
+      titulo: 'Notificación local #$id',
+      cuerpo: 'Enviada a las ${TimeOfDay.now().format(context)}',
+      fechaHora: DateTime.now(),
+      tipo: TipoNotificacion.local,
+    );
+    ref.read(notificacionesProvider.notifier).agregar(n);
+    await _mostrar(n.id, n.titulo, n.cuerpo);
+  }
+
+  Future<void> _programar5s() async {
+    final id = _contadorId++;
+    final n = NotificacionLocal(
+      id: id,
+      titulo: 'Recordatorio #$id',
+      cuerpo: 'Programado 5 segundos desde ${TimeOfDay.now().format(context)}',
+      fechaHora: DateTime.now().add(const Duration(seconds: 5)),
+      tipo: TipoNotificacion.local,
+    );
+    ref.read(notificacionesProvider.notifier).agregar(n);
+    await _programar(n.id, n.titulo, n.cuerpo,
+        const Duration(seconds: 5));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Llega en 5 segundos...')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final notifs = ref.watch(notificacionesProvider)
+        .where((n) => n.tipo == TipoNotificacion.local)
+        .toList();
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Notificaciones Locales'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_sweep),
+            onPressed: () =>
+                ref.read(notificacionesProvider.notifier).limpiar(),
+          ),
+        ],
+      ),
+      body: Column(
         children: [
-
-          _Seccion('Básicas'),
-          _Boton(
-            label:   'Notificación simple',
-            icono:   Icons.notifications,
-            color:   cs.primary,
-            onPress: () => _svc.simple(
-              id:     1,
-              titulo: 'Hola desde Flutter 👋',
-              cuerpo: 'Esta es una notificación local simple',
-            ),
-          ),
-          const SizedBox(height: 8),
-          _Boton(
-            label:   'Notificación de alerta',
-            icono:   Icons.warning_amber,
-            color:   Colors.orange,
-            onPress: () => _svc.simple(
-              id:     2,
-              titulo: '⚠️ Alerta del sistema',
-              cuerpo: 'CPU al 98% en prod-01',
-              canal:  'canal_alertas',
-            ),
-          ),
-
-          const SizedBox(height: 16),
-          _Seccion('Con interacción'),
-          _Boton(
-            label:   'Con botones de acción',
-            icono:   Icons.task_alt,
-            color:   Colors.teal,
-            onPress: () => _svc.conAcciones(
-              id:      3,
-              titulo:  'Nuevo ticket de soporte',
-              cuerpo:  'prod-01 reporta latencia > 500ms',
-              payload: 'ticket:1234',
-              acciones: [
-                (id: 'RESOLVER', label: 'Resolver', icono: null),
-                (id: 'IGNORAR',  label: 'Ignorar',  icono: null),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _enviarAhora,
+                    icon: const Icon(Icons.send),
+                    label: const Text('Ahora'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _programar5s,
+                    icon: const Icon(Icons.timer),
+                    label: const Text('En 5 s'),
+                  ),
+                ),
               ],
             ),
           ),
-          const SizedBox(height: 8),
-          _Boton(
-            label:   'Simular descarga (progreso)',
-            icono:   Icons.download,
-            color:   Colors.blue,
-            onPress: _simularDescarga,
-          ),
-
-          const SizedBox(height: 16),
-          _Seccion('Programadas'),
-          _Boton(
-            label:   'En 5 segundos',
-            icono:   Icons.schedule,
-            color:   Colors.purple,
-            onPress: () {
-              _svc.programada(
-                id:     10,
-                titulo: '⏰ Recordatorio',
-                cuerpo: 'Han pasado 5 segundos',
-                en:     const Duration(seconds: 5),
-              );
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Programada en 5s — minimiza la app'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
-          ),
-
-          const SizedBox(height: 16),
-          _Seccion('Gestión'),
-          OutlinedButton.icon(
-            onPressed: () => _svc.cancelarTodas(),
-            icon:  const Icon(Icons.delete_sweep_outlined),
-            label: const Text('Cancelar todas'),
+          Expanded(
+            child: notifs.isEmpty
+                ? const Center(
+                    child: Text('Sin notificaciones locales aún',
+                        style: TextStyle(color: Colors.grey)))
+                : ListView.builder(
+                    itemCount: notifs.length,
+                    itemBuilder: (context, i) {
+                      final n = notifs[i];
+                      return ListTile(
+                        leading: const Icon(Icons.notifications,
+                            color: Colors.indigo),
+                        title: Text(n.titulo),
+                        subtitle: Text(n.cuerpo),
+                        trailing: Text(
+                          '${n.fechaHora.hour}:${n.fechaHora.minute.toString().padLeft(2, '0')}',
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
@@ -1109,200 +1308,466 @@ class _PantallaLocalesState extends State<PantallaLocales> {
   }
 }
 
-class _Seccion extends StatelessWidget {
-  final String texto;
-  const _Seccion(this.texto);
+// ---------- Tab 1: Push FCM ----------
+class PantallaPush extends ConsumerStatefulWidget {
+  const PantallaPush({super.key});
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Text(texto,
-        style: Theme.of(context).textTheme.labelLarge
-            ?.copyWith(color: Theme.of(context).colorScheme.primary)),
-  );
+  ConsumerState<PantallaPush> createState() => _PantallaPushState();
 }
 
-class _Boton extends StatelessWidget {
-  final String       label;
-  final IconData     icono;
-  final Color        color;
-  final VoidCallback onPress;
-  const _Boton({
-    required this.label,
-    required this.icono,
-    required this.color,
-    required this.onPress,
-  });
+class _PantallaPushState extends ConsumerState<PantallaPush> {
+  String _token = 'Obteniendo...';
 
   @override
-  Widget build(BuildContext context) => FilledButton.icon(
-    style:    FilledButton.styleFrom(backgroundColor: color),
-    onPressed: onPress,
-    icon:      Icon(icono),
-    label:     Text(label),
-  );
+  void initState() {
+    super.initState();
+    _obtenerToken();
+  }
+
+  Future<void> _obtenerToken() async {
+    final t = await FirebaseMessaging.instance.getToken();
+    if (mounted) setState(() => _token = t ?? 'No disponible');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pushNotifs = ref.watch(notificacionesProvider)
+        .where((n) => n.tipo == TipoNotificacion.push)
+        .toList();
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Push FCM'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_sweep),
+            onPressed: () =>
+                ref.read(notificacionesProvider.notifier).limpiar(),
+          ),
+        ],
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Token FCM:',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                SelectableText(
+                  _token,
+                  style: const TextStyle(
+                      fontSize: 10, fontFamily: 'monospace'),
+                ),
+              ],
+            ),
+          ),
+          const Divider(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Text(
+              'Mensajes recibidos (${pushNotifs.length})',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(
+            child: pushNotifs.isEmpty
+                ? const Center(
+                    child: Text('Envía un push desde Firebase Console',
+                        style: TextStyle(color: Colors.grey)))
+                : ListView.builder(
+                    itemCount: pushNotifs.length,
+                    itemBuilder: (context, i) {
+                      final n = pushNotifs[i];
+                      return ListTile(
+                        leading: Icon(
+                          n.leida
+                              ? Icons.mark_email_read
+                              : Icons.mark_email_unread,
+                          color: n.leida ? Colors.grey : Colors.deepPurple,
+                        ),
+                        title: Text(n.titulo,
+                            style: TextStyle(
+                                fontWeight: n.leida
+                                    ? FontWeight.normal
+                                    : FontWeight.bold)),
+                        subtitle: Text(n.cuerpo),
+                        trailing: Text(
+                          '${n.fechaHora.hour}:${n.fechaHora.minute.toString().padLeft(2, '0')}',
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                        onTap: () => ref
+                            .read(notificacionesProvider.notifier)
+                            .marcarLeida(n.id),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 ```
 
-**Crea `lib/features/pantalla_push.dart`:**
+> **Prueba esto:** Tab "Locales" → pulsa "Ahora" 3 veces y luego "En 5 s". A los 5 s llega la notificación programada. Ve al tab "Push FCM" → copia el token → envía un push desde Firebase Console → el mensaje aparece en la lista. Toca un mensaje para marcarlo como leído.
+
+Salida esperada: dos tabs funcionales, historial separado por tipo, marcado de leído sin perder los otros items.
+
+---
+
+## `main.dart` completo — referencia
+
+El archivo del Paso 5 es el `main.dart` completo de referencia. Incluye todos los patrones del módulo integrados en una sola app funcional con `NavigationBar`.
+
+Para el proyecto final estructurado en múltiples archivos, ver la sección "Proyecto final" a continuación.
+
+---
+
+## Proyecto final
+
+### Estructura
+
+```
+modulo16_notificaciones/
+├── android/
+│   └── app/
+│       ├── src/main/AndroidManifest.xml   (permisos + receivers FCM)
+│       └── google-services.json           (desde Firebase Console)
+├── ios/
+│   └── Runner/
+│       └── Info.plist                     (UIBackgroundModes)
+├── lib/
+│   ├── main.dart
+│   ├── models/
+│   │   └── notificacion_local.dart
+│   ├── services/
+│   │   └── servicio_notificaciones.dart
+│   ├── providers/
+│   │   └── notificaciones_provider.dart
+│   └── screens/
+│       ├── pantalla_locales.dart
+│       └── pantalla_push.dart
+└── pubspec.yaml
+```
+
+### Archivos clave
+
+#### `lib/models/notificacion_local.dart`
+
+```dart
+enum TipoNotificacion { local, push }
+
+class NotificacionLocal {
+  final int id;
+  final String titulo;
+  final String cuerpo;
+  final DateTime fechaHora;
+  final TipoNotificacion tipo;
+  final bool leida;
+
+  const NotificacionLocal({
+    required this.id,
+    required this.titulo,
+    required this.cuerpo,
+    required this.fechaHora,
+    required this.tipo,
+    this.leida = false,
+  });
+
+  NotificacionLocal copyWith({bool? leida}) => NotificacionLocal(
+        id: id,
+        titulo: titulo,
+        cuerpo: cuerpo,
+        fechaHora: fechaHora,
+        tipo: tipo,
+        leida: leida ?? this.leida,
+      );
+
+  @override
+  String toString() =>
+      'NotificacionLocal(id: $id, titulo: $titulo, tipo: $tipo, leida: $leida)';
+}
+```
+
+#### `lib/services/servicio_notificaciones.dart`
+
+```dart
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/timezone.dart' as tz;
+
+class ServicioNotificaciones {
+  // Singleton
+  ServicioNotificaciones._();
+  static final ServicioNotificaciones instance = ServicioNotificaciones._();
+
+  final FlutterLocalNotificationsPlugin _plugin =
+      FlutterLocalNotificationsPlugin();
+
+  static const AndroidNotificationChannel canal = AndroidNotificationChannel(
+    'canal_principal',
+    'Notificaciones',
+    importance: Importance.high,
+  );
+
+  Future<void> init() async {
+    // Crear canal en Android
+    await _plugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(canal);
+
+    // Inicializar plugin
+    await _plugin.initialize(
+      const InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        iOS: DarwinInitializationSettings(
+          requestAlertPermission: true,
+          requestBadgePermission: true,
+          requestSoundPermission: true,
+        ),
+      ),
+    );
+
+    // Solicitar permiso Android 13+
+    await _plugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestNotificationsPermission();
+  }
+
+  Future<void> mostrar({
+    required int id,
+    required String titulo,
+    required String cuerpo,
+  }) async {
+    await _plugin.show(
+      id,
+      titulo,
+      cuerpo,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'canal_principal',
+          'Notificaciones',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(),
+      ),
+    );
+  }
+
+  Future<void> programar({
+    required int id,
+    required String titulo,
+    required String cuerpo,
+    required Duration demora,
+  }) async {
+    final cuando = tz.TZDateTime.now(tz.local).add(demora);
+    await _plugin.zonedSchedule(
+      id,
+      titulo,
+      cuerpo,
+      cuando,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'canal_principal',
+          'Notificaciones',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+    );
+  }
+
+  Future<void> cancelar(int id) async => _plugin.cancel(id);
+
+  Future<void> cancelarTodas() async => _plugin.cancelAll();
+}
+```
+
+#### `lib/providers/notificaciones_provider.dart`
+
+```dart
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/notificacion_local.dart';
+
+class NotificacionesNotifier extends Notifier<List<NotificacionLocal>> {
+  @override
+  List<NotificacionLocal> build() => [];
+
+  void agregar(NotificacionLocal n) => state = [n, ...state];
+
+  void marcarLeida(int id) {
+    state = [
+      for (final n in state)
+        if (n.id == id) n.copyWith(leida: true) else n,
+    ];
+  }
+
+  void eliminar(int id) {
+    state = state.where((n) => n.id != id).toList();
+  }
+
+  void limpiar() => state = [];
+}
+
+final notificacionesProvider =
+    NotifierProvider<NotificacionesNotifier, List<NotificacionLocal>>(
+  NotificacionesNotifier.new,
+);
+
+// Provider derivado para contar no leídas
+final noLeidasProvider = Provider<int>((ref) {
+  return ref.watch(notificacionesProvider).where((n) => !n.leida).length;
+});
+```
+
+#### `lib/screens/pantalla_locales.dart`
 
 ```dart
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../core/fcm_service.dart';
+import '../models/notificacion_local.dart';
+import '../providers/notificaciones_provider.dart';
+import '../services/servicio_notificaciones.dart';
 
-// Provider del token FCM
-final tokenProvider = FutureProvider<String?>((ref) async {
-  return FcmService.instance.obtenerToken();
-});
-
-// Provider de topics suscritos
-final topicsProvider = StateProvider<Set<String>>((ref) => {});
-
-class PantallaPush extends ConsumerWidget {
-  const PantallaPush({super.key});
-
-  static const _topicsDisponibles = [
-    (id: 'noticias',       nombre: 'Noticias generales'),
-    (id: 'alertas_prod',   nombre: 'Alertas de producción'),
-    (id: 'actualizaciones', nombre: 'Actualizaciones de la app'),
-  ];
+class PantallaLocales extends ConsumerStatefulWidget {
+  const PantallaLocales({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tokenAsync = ref.watch(tokenProvider);
-    final topics     = ref.watch(topicsProvider);
-    final cs         = Theme.of(context).colorScheme;
+  ConsumerState<PantallaLocales> createState() => _PantallaLocalesState();
+}
+
+class _PantallaLocalesState extends ConsumerState<PantallaLocales> {
+  int _contadorId = 100;
+  final ServicioNotificaciones _servicio = ServicioNotificaciones.instance;
+
+  Future<void> _enviarAhora() async {
+    final id = _contadorId++;
+    final n = NotificacionLocal(
+      id: id,
+      titulo: 'Notificación local #$id',
+      cuerpo: 'Enviada a las ${TimeOfDay.now().format(context)}',
+      fechaHora: DateTime.now(),
+      tipo: TipoNotificacion.local,
+    );
+    ref.read(notificacionesProvider.notifier).agregar(n);
+    await _servicio.mostrar(id: n.id, titulo: n.titulo, cuerpo: n.cuerpo);
+  }
+
+  Future<void> _programar(Duration demora) async {
+    final id = _contadorId++;
+    final segundos = demora.inSeconds;
+    final n = NotificacionLocal(
+      id: id,
+      titulo: 'Recordatorio #$id',
+      cuerpo: 'Programado para $segundos s desde ahora',
+      fechaHora: DateTime.now().add(demora),
+      tipo: TipoNotificacion.local,
+    );
+    ref.read(notificacionesProvider.notifier).agregar(n);
+    await _servicio.programar(
+        id: n.id, titulo: n.titulo, cuerpo: n.cuerpo, demora: demora);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Llega en $segundos segundos (id: $id)')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final locales = ref.watch(notificacionesProvider)
+        .where((n) => n.tipo == TipoNotificacion.local)
+        .toList();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notificaciones push'),
-        backgroundColor: cs.primaryContainer,
+        title: const Text('Notificaciones Locales'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_sweep),
+            tooltip: 'Limpiar historial',
+            onPressed: () =>
+                ref.read(notificacionesProvider.notifier).limpiar(),
+          ),
+        ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: Column(
         children: [
-
-          // ── Token FCM ─────────────────────────────────────────
-          Text('Token del dispositivo',
-              style: Theme.of(context).textTheme.labelLarge
-                  ?.copyWith(color: cs.primary)),
-          const SizedBox(height: 8),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: tokenAsync.when(
-                loading: () => const Center(
-                    child: CircularProgressIndicator()),
-                error: (e, _) => Text('Error: $e',
-                    style: TextStyle(color: cs.error)),
-                data: (token) => Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      token ?? 'Token no disponible',
-                      style: const TextStyle(
-                          fontSize: 11, fontFamily: 'monospace'),
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 8),
-                    if (token != null)
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            Clipboard.setData(
-                                ClipboardData(text: token));
-                            ScaffoldMessenger.of(context)
-                                .showSnackBar(
-                              const SnackBar(
-                                content: Text('Token copiado'),
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          },
-                          icon:  const Icon(Icons.copy, size: 16),
-                          label: const Text('Copiar token'),
-                        ),
-                      ),
-                  ],
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _enviarAhora,
+                  icon: const Icon(Icons.send),
+                  label: const Text('Ahora'),
                 ),
-              ),
+                ElevatedButton.icon(
+                  onPressed: () => _programar(const Duration(seconds: 5)),
+                  icon: const Icon(Icons.timer),
+                  label: const Text('En 5 s'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () => _programar(const Duration(seconds: 30)),
+                  icon: const Icon(Icons.timer_outlined),
+                  label: const Text('En 30 s'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _servicio.cancelarTodas(),
+                  icon: const Icon(Icons.cancel_outlined),
+                  label: const Text('Cancelar todas'),
+                ),
+              ],
             ),
           ),
-
-          const SizedBox(height: 24),
-
-          // ── Topics ────────────────────────────────────────────
-          Text('Topics',
-              style: Theme.of(context).textTheme.labelLarge
-                  ?.copyWith(color: cs.primary)),
-          const SizedBox(height: 4),
-          Text(
-            'Suscríbete a un topic para recibir mensajes '
-            'enviados a ese grupo de dispositivos',
-            style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
-          ),
-          const SizedBox(height: 8),
-          ..._topicsDisponibles.map((t) {
-            final suscrito = topics.contains(t.id);
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: SwitchListTile(
-                title:    Text(t.nombre),
-                subtitle: Text(t.id,
-                    style: TextStyle(
-                        fontSize: 11, color: cs.onSurfaceVariant)),
-                value:    suscrito,
-                onChanged: (v) async {
-                  if (v) {
-                    await FcmService.instance.suscribirA(t.id);
-                    ref.read(topicsProvider.notifier).update(
-                        (s) => {...s, t.id});
-                  } else {
-                    await FcmService.instance.desuscribirDe(t.id);
-                    ref.read(topicsProvider.notifier).update(
-                        (s) => s.where((x) => x != t.id).toSet());
-                  }
-                },
-              ),
-            );
-          }),
-
-          const SizedBox(height: 16),
-
-          // ── Instrucciones de prueba ───────────────────────────
-          Card(
-            color: cs.surfaceContainerHighest,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    Icon(Icons.info_outline,
-                        size: 16, color: cs.onSurfaceVariant),
-                    const SizedBox(width: 6),
-                    Text('Cómo probar el push',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color:      cs.onSurfaceVariant)),
-                  ]),
-                  const SizedBox(height: 8),
-                  Text(
-                    '1. Copia el token de arriba\n'
-                    '2. Ve a Firebase Console → Messaging\n'
-                    '3. Crea una nueva campaña → Notification\n'
-                    '4. Pega el token en "Send test message"\n'
-                    '5. Envía — la notificación llegará al dispositivo',
-                    style: TextStyle(
-                        fontSize: 12, color: cs.onSurfaceVariant),
+          const Divider(),
+          Expanded(
+            child: locales.isEmpty
+                ? const Center(
+                    child: Text('Sin notificaciones locales',
+                        style: TextStyle(color: Colors.grey)))
+                : ListView.builder(
+                    itemCount: locales.length,
+                    itemBuilder: (context, i) {
+                      final n = locales[i];
+                      return Dismissible(
+                        key: Key('local_${n.id}'),
+                        direction: DismissDirection.endToStart,
+                        background: Container(
+                          alignment: Alignment.centerRight,
+                          color: Colors.red,
+                          padding: const EdgeInsets.only(right: 16),
+                          child: const Icon(Icons.delete,
+                              color: Colors.white),
+                        ),
+                        onDismissed: (_) => ref
+                            .read(notificacionesProvider.notifier)
+                            .eliminar(n.id),
+                        child: ListTile(
+                          leading: const Icon(Icons.notifications,
+                              color: Colors.indigo),
+                          title: Text(n.titulo),
+                          subtitle: Text(n.cuerpo),
+                          trailing: Text(
+                            '${n.fechaHora.hour}:${n.fechaHora.minute.toString().padLeft(2, '0')}',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                ],
-              ),
-            ),
           ),
         ],
       ),
@@ -1311,82 +1776,377 @@ class PantallaPush extends ConsumerWidget {
 }
 ```
 
-```bash
-flutter run
-# Tab "Locales" — prueba todos los tipos de notificación
-# Tab "Push" — copia el token y prueba desde Firebase Console
+#### `lib/screens/pantalla_push.dart`
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import '../models/notificacion_local.dart';
+import '../providers/notificaciones_provider.dart';
+
+class PantallaPush extends ConsumerStatefulWidget {
+  const PantallaPush({super.key});
+
+  @override
+  ConsumerState<PantallaPush> createState() => _PantallaPushState();
+}
+
+class _PantallaPushState extends ConsumerState<PantallaPush> {
+  String _token = 'Obteniendo token...';
+
+  @override
+  void initState() {
+    super.initState();
+    _obtenerToken();
+  }
+
+  Future<void> _obtenerToken() async {
+    try {
+      final token = await FirebaseMessaging.instance.getToken();
+      if (mounted) setState(() => _token = token ?? 'No disponible');
+    } catch (e) {
+      if (mounted) setState(() => _token = 'Error: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pushNotifs = ref.watch(notificacionesProvider)
+        .where((n) => n.tipo == TipoNotificacion.push)
+        .toList();
+    final noLeidas =
+        pushNotifs.where((n) => !n.leida).length;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Push FCM'
+            '${noLeidas > 0 ? ' ($noLeidas sin leer)' : ''}'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _obtenerToken,
+            tooltip: 'Refrescar token',
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_sweep),
+            onPressed: () =>
+                ref.read(notificacionesProvider.notifier).limpiar(),
+          ),
+        ],
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Token FCM
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.key, size: 16),
+                    const SizedBox(width: 6),
+                    const Text('Token FCM (selecciona para copiar):',
+                        style: TextStyle(fontWeight: FontWeight.bold,
+                            fontSize: 12)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SelectableText(
+                  _token,
+                  style: const TextStyle(
+                      fontSize: 10, fontFamily: 'monospace'),
+                ),
+              ],
+            ),
+          ),
+          const Divider(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Text(
+              'Mensajes recibidos (${pushNotifs.length})',
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
+          Expanded(
+            child: pushNotifs.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(Icons.cloud_off, size: 48, color: Colors.grey),
+                        SizedBox(height: 8),
+                        Text(
+                          'Envía un push desde Firebase Console\ncopiando el token de arriba',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: pushNotifs.length,
+                    itemBuilder: (context, i) {
+                      final n = pushNotifs[i];
+                      return ListTile(
+                        leading: Icon(
+                          n.leida
+                              ? Icons.mark_email_read
+                              : Icons.mark_email_unread,
+                          color:
+                              n.leida ? Colors.grey : Colors.deepPurple,
+                        ),
+                        title: Text(n.titulo,
+                            style: TextStyle(
+                                fontWeight: n.leida
+                                    ? FontWeight.normal
+                                    : FontWeight.bold)),
+                        subtitle: Text(n.cuerpo),
+                        trailing: Text(
+                          '${n.fechaHora.hour}:${n.fechaHora.minute.toString().padLeft(2, '0')}',
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                        onTap: () => ref
+                            .read(notificacionesProvider.notifier)
+                            .marcarLeida(n.id),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+```
+
+#### `lib/main.dart` (proyecto final)
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:timezone/data/latest_all.dart' as tz;
+import 'models/notificacion_local.dart';
+import 'providers/notificaciones_provider.dart';
+import 'services/servicio_notificaciones.dart';
+import 'screens/pantalla_locales.dart';
+import 'screens/pantalla_push.dart';
+
+// Handler de background — función de nivel superior (obligatorio)
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  // En background/terminated FCM muestra la notificación automáticamente
+  // si el mensaje incluye el campo "notification"
+}
+
+Future<void> main() async {
+  // 1. Inicializar bindings de Flutter
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // 2. Inicializar zonas horarias (requerido por zonedSchedule)
+  tz.initializeTimeZones();
+
+  // 3. Inicializar Firebase
+  await Firebase.initializeApp();
+
+  // 4. Registrar handler de background ANTES de runApp
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+  // 5. Inicializar servicio de notificaciones locales
+  await ServicioNotificaciones.instance.init();
+
+  // 6. Solicitar permiso FCM en iOS
+  await FirebaseMessaging.instance.requestPermission(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
+
+  // 7. Lanzar app con ProviderScope
+  runApp(const ProviderScope(child: NotificacionesApp()));
+}
+
+final _tabProvider = StateProvider<int>((ref) => 0);
+
+class NotificacionesApp extends StatelessWidget {
+  const NotificacionesApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Notificaciones — Módulo 16',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+        useMaterial3: true,
+      ),
+      home: const PantallaRaiz(),
+    );
+  }
+}
+
+class PantallaRaiz extends ConsumerStatefulWidget {
+  const PantallaRaiz({super.key});
+
+  @override
+  ConsumerState<PantallaRaiz> createState() => _PantallaRaizState();
+}
+
+class _PantallaRaizState extends ConsumerState<PantallaRaiz> {
+  final ServicioNotificaciones _servicio = ServicioNotificaciones.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _configurarFCMForeground();
+    _configurarAperturaDesdeNotificacion();
+  }
+
+  void _configurarFCMForeground() {
+    // Mensaje cuando app está en PRIMER PLANO
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      final notif = message.notification;
+      if (notif != null) {
+        final n = NotificacionLocal(
+          id: message.hashCode,
+          titulo: notif.title ?? 'Nuevo mensaje',
+          cuerpo: notif.body ?? '',
+          fechaHora: DateTime.now(),
+          tipo: TipoNotificacion.push,
+        );
+        ref.read(notificacionesProvider.notifier).agregar(n);
+        _servicio.mostrar(id: n.id, titulo: n.titulo, cuerpo: n.cuerpo);
+      }
+    });
+  }
+
+  void _configurarAperturaDesdeNotificacion() {
+    // Usuario toca la notificación cuando app estaba en background
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      // Navegar al tab de Push cuando se abre desde una notificación
+      ref.read(_tabProvider.notifier).state = 1;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tabActual = ref.watch(_tabProvider);
+    final noLeidas = ref.watch(noLeidasProvider);
+    const tabs = [
+      PantallaLocales(),
+      PantallaPush(),
+    ];
+    return Scaffold(
+      body: tabs[tabActual],
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: tabActual,
+        onDestinationSelected: (i) =>
+            ref.read(_tabProvider.notifier).state = i,
+        destinations: [
+          const NavigationDestination(
+            icon: Icon(Icons.notifications_outlined),
+            selectedIcon: Icon(Icons.notifications),
+            label: 'Locales',
+          ),
+          NavigationDestination(
+            icon: Badge(
+              isLabelVisible: noLeidas > 0,
+              label: Text('$noLeidas'),
+              child: const Icon(Icons.cloud_outlined),
+            ),
+            selectedIcon: Badge(
+              isLabelVisible: noLeidas > 0,
+              label: Text('$noLeidas'),
+              child: const Icon(Icons.cloud),
+            ),
+            label: 'Push FCM',
+          ),
+        ],
+      ),
+    );
+  }
+}
 ```
 
 ---
 
-## Flujo completo de un mensaje push
+## Guía rápida de imports
+
+```dart
+// Plugin de notificaciones locales
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+// Zonas horarias (transitive dep — no declarar en pubspec)
+import 'package:timezone/timezone.dart' as tz;
+import 'package:timezone/data/latest_all.dart' as tz;  // alias tz_data en algunos pasos
+
+// Firebase
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+
+// Riverpod
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+// Flutter
+import 'package:flutter/material.dart';
+```
+
+---
+
+## Cuándo usar qué
 
 ```
-                    ┌──────────────┐
-                    │   Backend    │  POST a API de FCM con token o topic
-                    └──────┬───────┘
-                           │
-                    ┌──────▼───────┐
-                    │  Firebase    │  Enruta al dispositivo correcto
-                    └──────┬───────┘
-                           │
-              ┌────────────┼────────────────┐
-              │            │                │
-    ┌─────────▼──┐  ┌──────▼──────┐  ┌─────▼───────────┐
-    │ App en     │  │ App en      │  │ App              │
-    │ PRIMER     │  │ FONDO       │  │ CERRADA          │
-    │ PLANO      │  │             │  │                  │
-    └─────────┬──┘  └──────┬──────┘  └─────┬───────────┘
-              │            │               │
-    onMessage  │   FCM muestra  │   FCM muestra │
-    → mostrar  │   automática   │   automática  │
-    con        │   mente ✅     │   mente ✅    │
-    local_notif│               │               │
-              │   onMessageOpened  getInitialMessage
-              │   App cuando el    App cuando el
-              │   usuario toca     usuario toca
+Situacion                                     | Solucion
+----------------------------------------------|--------------------------------------------------
+Sin internet, aviso inmediato                 | show()
+Sin internet, aviso en N segundos/minutos     | zonedSchedule() con TZDateTime.now().add(duration)
+Cancelar notificacion pendiente por id        | cancel(id)
+Cancelar todas las notificaciones pendientes  | cancelAll()
+Mensaje desde servidor a usuario con app open | onMessage.listen() → show()
+Mensaje cuando app cerrada o background       | FCM background handler + campo "notification"
+App abierta tocando notificacion push         | onMessageOpenedApp.listen()
+Mostrar badge en tab con mensajes sin leer    | Badge widget + provider derivado noLeidasProvider
+Canal con sonido personalizado Android        | AndroidNotificationChannel(sound: RawResourceAndroidNotificationSound('nombre'))
+Grupo de notificaciones Android               | AndroidNotificationDetails(groupKey, setAsGroupSummary: true)
+Mantener historial de notificaciones          | NotificacionesNotifier extends Notifier<List<NotificacionLocal>>
+Marcar mensajes como leidos                   | copyWith(leida: true) + state actualizado
 ```
 
 ---
 
 ## Ejercicios propuestos
 
-1. **Deep link desde notificación** — En `_onTap` de `NotificacionesLocales`
-   y en `_procesarMensaje` de `FcmService`, lee el `payload` recibido
-   (ej: `'pantalla:alertas'`). Usando un `GlobalKey<NavigatorState>` pasado
-   a `MaterialApp`, navega programáticamente a la pantalla correcta
-   cuando el usuario toca la notificación.
+1. **Sonido personalizado:** Crea un canal `'canal_alarmas'` con `importance: Importance.max` y añade un botón "Alarma urgente" que use ese canal. Verifica que en Android el sonido es diferente al canal normal.
 
-2. **Notificación de recordatorio diario** — Usa `zonedSchedule` con
-   `matchDateTimeComponents: DateTimeComponents.time` para programar
-   una notificación que se repita todos los días a la misma hora.
-   Añade un `TimePicker` en `PantallaLocales` para que el usuario elija la hora.
+2. **Notificaciones recurrentes:** Usa `periodicallyShow()` de `flutter_local_notifications` para mostrar un recordatorio de hidratacion cada hora. Añade un switch en la UI para activar/desactivar el recordatorio.
 
-3. **Badge de la app** — Instala `flutter_app_badger`. En `FcmService`,
-   incrementa el badge en `_onMensajePrimerPlano`. Cuando el usuario
-   abre la tab de Push, llama `FlutterAppBadger.removeBadge()`.
-   Guarda el contador en `StateProvider<int>` de Riverpod.
+3. **Deep link desde push:** En `onMessageOpenedApp`, lee `message.data['pantalla']`. Si el valor es `'push'`, navega al tab 1. Si es `'locales'`, navega al tab 0. Envía dos mensajes desde Firebase Console con distintos valores y verifica la navegación.
 
-4. **Payload estructurado** — En lugar de `String payload`, usa JSON en el
-   campo `data` del mensaje FCM: `{"pantalla": "alertas", "id": "42"}`.
-   Parsea el JSON en `_procesarMensaje` con `jsonDecode` y crea un
-   `sealed class NavDestino` con los casos posibles.
+4. **Persistencia del historial:** Usa `shared_preferences` para serializar y deserializar la lista de `NotificacionLocal`. Al relanzar la app, el historial debe seguir visible. Añade un campo `toJson()` / `fromJson()` al modelo.
 
 ---
 
-## Resumen de la página 16
+## Resumen
 
-- Las notificaciones **locales** se generan desde la app — no necesitan internet. Las **push** llegan desde un servidor remoto vía Firebase.
-- `FlutterLocalNotificationsPlugin` debe inicializarse en `main()` antes de `runApp()`. Los canales de Android se crean en la inicialización.
-- Android 13+ requiere el permiso `POST_NOTIFICATIONS` en runtime. iOS siempre requiere el diálogo de permiso del sistema.
-- `onlyAlertOnce: true` en la notificación de progreso evita que suene en cada actualización — solo suena la primera vez.
-- `FirebaseMessaging.onBackgroundMessage` recibe un handler **top-level** con `@pragma('vm:entry-point')` — no puede ser un método de clase.
-- En **primer plano**, FCM no muestra la notificación automáticamente en Android — hay que mostrarla manualmente con `flutter_local_notifications`.
-- En **fondo y app cerrada**, FCM la muestra automáticamente si el mensaje tiene `notification` payload.
-- Los **topics** permiten enviar a grupos de usuarios sin conocer cada token. `subscribeToTopic` y `unsubscribeFromTopic` son operaciones async.
-- `getInitialMessage()` detecta si la app se abrió tocando una notificación push cuando estaba completamente cerrada.
+- `FlutterLocalNotificationsPlugin` requiere un `AndroidNotificationChannel` creado antes de mostrar notificaciones; en iOS los permisos se solicitan en `DarwinInitializationSettings`.
+- `tz.initializeTimeZones()` debe llamarse antes de cualquier `zonedSchedule()`; `timezone` es una dependencia transitiva de `flutter_local_notifications`.
+- Para Android 13+ el permiso `POST_NOTIFICATIONS` se solicita en runtime con `requestNotificationsPermission()`.
+- El handler de background de FCM (`onBackgroundMessage`) debe ser una función de nivel superior anotada con `@pragma('vm:entry-point')`, no un método de clase.
+- El orden de inicializacion en `main()` es fijo: `ensureInitialized` → `initializeTimeZones` → `Firebase.initializeApp()` → `onBackgroundMessage` → `ServicioNotificaciones.init()` → `runApp`.
+- `onMessage` maneja mensajes FCM cuando la app está en primer plano; `onMessageOpenedApp` detecta la apertura desde una notificacion en background; el handler de background cubre el estado terminado.
+- `NotifierProvider` con `copyWith` garantiza inmutabilidad del estado: nunca modificar la lista directamente, siempre producir una nueva.
+- El widget `Badge` de Material 3 permite mostrar contadores de no leídos directamente en las `NavigationDestination` sin librerías adicionales.
 
----
-
-> **Siguiente página →** Página 17: Audio y video streaming con `audioplayers`,
-> `video_player` y controles de reproducción en segundo plano.
+> **Siguiente página →** Página 17: Bluetooth y comunicación en tiempo real con WebSockets.

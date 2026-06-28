@@ -72,7 +72,7 @@ const fn = useCallback(() => {
 
 ---
 
-## Fase 1 — `src/components/MemoizedList.tsx`
+## PASO 1 — `src/components/MemoizedList.tsx`
 
 Demuestra el problema de re-renders con `React.memo` y cómo `useCallback`
 lo soluciona. Un counter independiente provoca renders del padre — sin callback
@@ -210,6 +210,35 @@ export default function MemoizedList() {
 }
 ```
 
+### `src/App.tsx`
+
+```tsx
+// src/App.tsx
+
+import MemoizedList from './components/MemoizedList'
+
+// ┌──────────────────────────────────────────────────────────────────────┐
+// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
+// │  1  MemoizedList    — useCallback + React.memo: evita re-renders    │
+// │  2  SearchWithFetch — useCallback en deps de useEffect (sin bucle)  │
+// │  3  FilterTable     — tres callbacks estables, tabla memoizada      │
+// │  4  PaginatedFetch  — useCallback con [page] para paginación        │
+// └──────────────────────────────────────────────────────────────────────┘
+const PASO = 1
+
+export default function App() {
+  const content =
+    PASO === 1 ? <MemoizedList /> :
+    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
+
+  return (
+    <main style={{ maxWidth: 720, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
+      {content}
+    </main>
+  )
+}
+```
+
 ### Prueba esto
 
 - Pulsa "Incrementar counter" varias veces — el número de fila ("render #N") **no debe cambiar**; las filas no re-renderizan
@@ -220,7 +249,7 @@ export default function MemoizedList() {
 
 ---
 
-## Fase 2 — `src/components/SearchWithFetch.tsx`
+## PASO 2 — `src/components/SearchWithFetch.tsx`
 
 `useCallback` para estabilizar una función de fetch que entra en el array de
 dependencias de `useEffect`. Sin él, `useEffect` correría en bucle infinito.
@@ -348,6 +377,18 @@ export default function SearchWithFetch() {
 }
 ```
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import SearchWithFetch from './components/SearchWithFetch'
+```
+
+```tsx
+PASO === 2 ? <SearchWithFetch /> :
+```
+
+Cambia `PASO = 2` y guarda.
+
 ### Prueba esto
 
 - Carga inicial — se llama `fetchPosts` automáticamente via `useEffect`
@@ -358,7 +399,7 @@ export default function SearchWithFetch() {
 
 ---
 
-## Fase 3 — `src/components/FilterTable.tsx`
+## PASO 3 — `src/components/FilterTable.tsx`
 
 `useCallback` para handlers de fila en una tabla con React.memo.
 Múltiples callbacks tipados: editar, eliminar y cambiar estado.
@@ -564,6 +605,18 @@ export default function FilterTable() {
 }
 ```
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import FilterTable from './components/FilterTable'
+```
+
+```tsx
+PASO === 3 ? <FilterTable /> :
+```
+
+Cambia `PASO = 3` y guarda.
+
 ### Prueba esto
 
 - Cambia el filtro de departamento — las filas visibles cambian pero las filas existentes **no re-renderizan** (observa en DevTools Profiler)
@@ -574,7 +627,7 @@ export default function FilterTable() {
 
 ---
 
-## Fase 4 — `src/components/PaginatedFetch.tsx`
+## PASO 4 — `src/components/PaginatedFetch.tsx`
 
 `useCallback` para una función de fetch con múltiples parámetros.
 Al cambiar de página, el callback se recrea con los nuevos parámetros.
@@ -725,6 +778,18 @@ export default function PaginatedFetch() {
 }
 ```
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import PaginatedFetch from './components/PaginatedFetch'
+```
+
+```tsx
+PASO === 4 ? <PaginatedFetch /> :
+```
+
+Cambia `PASO = 4` y guarda. Desde aquí puedes volver a cualquier paso anterior cambiando la constante.
+
 ### Prueba esto
 
 - Haz clic en los botones de paginación — `page` cambia → `fetchPage` se recrea → `useEffect` lo detecta → nueva petición
@@ -732,50 +797,6 @@ export default function PaginatedFetch() {
 - Haz clic en el mismo número de página dos veces — la segunda vez `page` no cambia → `fetchPage` es el mismo → sin petición extra
 - Elimina `[page]` de las deps de `useCallback` (deja `[]`) — la paginación deja de funcionar: `fetchPage` siempre usa `page = 1`
 - Añade un campo de búsqueda con su propio estado y agrégalo a las deps: `useCallback(async () => { ... }, [page, search])`
-
----
-
-## Navegador de pasos — `App.tsx`
-
-```tsx
-// src/App.tsx
-
-import MemoizedList    from './components/MemoizedList'
-import SearchWithFetch from './components/SearchWithFetch'
-import FilterTable     from './components/FilterTable'
-import PaginatedFetch  from './components/PaginatedFetch'
-
-// ┌──────────────────────────────────────────────────────────────────────┐
-// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
-// │  1  MemoizedList    — useCallback + React.memo: evita re-renders    │
-// │  2  SearchWithFetch — useCallback en deps de useEffect (sin bucle)  │
-// │  3  FilterTable     — tres callbacks estables, tabla memoizada      │
-// │  4  PaginatedFetch  — useCallback con [page] para paginación        │
-// └──────────────────────────────────────────────────────────────────────┘
-const PASO = 1
-
-export default function App() {
-  const content =
-    PASO === 1 ? <MemoizedList /> :
-    PASO === 2 ? <SearchWithFetch /> :
-    PASO === 3 ? <FilterTable /> :
-    PASO === 4 ? <PaginatedFetch /> :
-    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
-
-  return (
-    <main style={{ maxWidth: 720, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
-      {content}
-    </main>
-  )
-}
-```
-
-### Prueba esto
-
-- Cambia `PASO = 1` — pulsa el counter y observa que las filas memoizadas no re-renderizan
-- Cambia a `PASO = 2` — busca posts; comenta `useCallback` para ver el bucle de peticiones
-- Cambia a `PASO = 3` — filtra la tabla y verifica con DevTools Profiler que las filas no se actualizan al filtrar
-- Cambia a `PASO = 4` — navega entre páginas y observa en Network las peticiones paginadas
 
 ---
 

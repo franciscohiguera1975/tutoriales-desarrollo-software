@@ -1,21 +1,290 @@
 # Tutorial Flutter — Página 18
 ## Módulo 6 · UI Avanzada
-### Animaciones — construcción incremental paso a paso
+### Animaciones: implícitas, explícitas, Hero y Lottie
 
 ---
 
-## Crear el proyecto
+Flutter trata las animaciones como ciudadanos de primera clase: desde un simple cambio de color
+hasta transiciones entre pantallas con elemento compartido, todo sigue el mismo modelo basado en
+`Animation<T>` y `AnimationController`. En esta página construirás cinco demos progresivos que
+cubren las cuatro familias de animación que usarás en producción.
+
+---
+
+## ¿Qué aprenderás?
+
+```
+Tipo                        | Clase / Widget principal          | Cuando usar
+----------------------------|-----------------------------------|-----------------------------------------
+Animacion implicita simple  | AnimatedContainer                 | Cambia width/height/color/radius con dur.
+Animacion implicita opac.   | AnimatedOpacity                   | Fade in/out de cualquier widget
+Transicion entre widgets    | AnimatedSwitcher                  | Swap de dos widgets distintos (con key)
+Animacion explicita         | AnimationController + Tween       | Control total: play, pause, reverse
+Elemento compartido         | Hero                              | Transicion visual entre dos pantallas
+Transicion de pagina        | PageRouteBuilder                  | Slide/fade/scale al navegar entre rutas
+Animaciones JSON            | Lottie.asset / Lottie.network     | Ilustraciones animadas de LottieFiles
+Multi-controlador           | TickerProviderStateMixin          | Cuando se usan 2+ AnimationControllers
+Animacion en loop           | _ctrl.repeat() / Lottie repeat    | Indicadores de carga o fondos animados
+Animacion por gesto         | _ctrl.value = gesture.delta       | Drag-to-reveal, pull-to-refresh custom
+```
+
+---
+
+## Patrones clave
+
+### Patron 1 — Animaciones implícitas: `AnimatedContainer` y `AnimatedOpacity`
+
+```dart
+// AnimatedContainer cambia propiedades suavemente al cambiar el estado
+AnimatedContainer(
+  duration: const Duration(milliseconds: 400),  // obligatorio — sin esto Flutter lanza error
+  curve: Curves.easeInOut,
+  width: _expandido ? 200.0 : 80.0,
+  height: _expandido ? 200.0 : 80.0,
+  decoration: BoxDecoration(
+    color: _expandido ? Colors.blue : Colors.red,
+    borderRadius: BorderRadius.circular(_expandido ? 32 : 8),
+  ),
+)
+
+// AnimatedOpacity — fade in / fade out de cualquier widget hijo
+AnimatedOpacity(
+  duration: const Duration(milliseconds: 300),
+  opacity: _visible ? 1.0 : 0.0,
+  child: const Text('Aparezco y desaparezco'),
+)
+```
+
+> **Mini-ejercicio (5 min):** Agrega un `FloatingActionButton` que alterne `_expandido`.
+> Cambia la curva a `Curves.bounceOut` y verifica el efecto de rebote al expandirse.
+> Luego agrega un `AnimatedPadding` que envuelva un icono con padding `8.0` en reposo y `32.0`
+> al expandirse. Observa cómo el padding se anima sin escribir una sola linea de lógica
+> de interpolacion.
+
+---
+
+### Patron 2 — `AnimatedSwitcher`: transición entre widgets
+
+```dart
+// ScaleTransition personalizado al cambiar el valor del contador
+AnimatedSwitcher(
+  duration: const Duration(milliseconds: 300),
+  transitionBuilder: (child, animation) => ScaleTransition(
+    scale: animation,
+    child: child,
+  ),
+  // KEY es obligatorio para que Flutter detecte que el widget cambio
+  child: Text(
+    '$_contador',
+    key: ValueKey<int>(_contador),
+    style: const TextStyle(fontSize: 48),
+  ),
+)
+
+// FadeTransition (comportamiento por defecto si se omite transitionBuilder)
+AnimatedSwitcher(
+  duration: const Duration(milliseconds: 500),
+  child: _mostrarA
+      ? const WidgetA(key: ValueKey('a'))
+      : const WidgetB(key: ValueKey('b')),
+)
+```
+
+> **Mini-ejercicio (5 min):** Reemplaza el `Text` del contador por un `AnimatedSwitcher` con
+> `ScaleTransition`. Observa que sin `ValueKey` la animacion no dispara aunque cambie el numero.
+> Agrega `ValueKey<String>('A')` y `ValueKey<String>('B')` a los hijos de un segundo
+> `AnimatedSwitcher` que alterne entre dos `Container` de colores distintos; verifica que la
+> animacion se activa correctamente.
+
+---
+
+### Patron 3 — `AnimationController` + `Tween` + `AnimatedBuilder`: animaciones explícitas
+
+```dart
+// El mixin SingleTickerProviderStateMixin provee el vsync necesario
+class _MiWidgetState extends State<MiWidget> with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _rotacion;
+  late Animation<Color?> _color;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,                              // referencia al State actual
+      duration: const Duration(seconds: 2),
+    );
+    _rotacion = Tween<double>(begin: 0, end: 2 * 3.14159).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.linear),
+    );
+    _color = ColorTween(begin: Colors.blue, end: Colors.red).animate(_ctrl);
+
+    // Escuchar cuando termina la animacion
+    _ctrl.addStatusListener((status) {
+      if (status == AnimationStatus.completed) debugPrint('Termino!');
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();    // siempre liberar recursos
+    super.dispose();
+  }
+}
+
+// En build() — AnimatedBuilder reconstruye solo el subarbol afectado
+AnimatedBuilder(
+  animation: _ctrl,
+  builder: (context, child) => Transform.rotate(
+    angle: _rotacion.value,
+    child: Container(color: _color.value, width: 80, height: 80),
+  ),
+)
+
+// Metodos de control
+_ctrl.forward();              // reproducir hacia adelante (0.0 → 1.0)
+_ctrl.reverse();              // reproducir hacia atras (1.0 → 0.0)
+_ctrl.repeat(reverse: true);  // ping-pong continuo
+_ctrl.stop();                 // detener en el frame actual
+```
+
+> **Mini-ejercicio (6 min):** Cambia la curva de `_rotacion` a `Curves.elasticOut`.
+> Agrega `_ctrl.repeat(reverse: true)` en `initState` y observa el efecto ping-pong.
+> Luego agrega `_ctrl.addStatusListener` que imprima `'Termino'` en consola cuando la
+> animacion complete. Usa el metodo `_ctrl.stop()` en un boton adicional para pausarla.
+
+---
+
+### Patron 4 — `Hero`: transición con elemento compartido entre pantallas
+
+```dart
+// Pantalla ORIGEN — el Hero envuelve la imagen pequena
+Hero(
+  tag: 'imagen_${producto.id}',   // tag unico por elemento en pantalla
+  child: Image.network(producto.imagenUrl, width: 80),
+)
+
+// Pantalla DESTINO — mismo tag, imagen mas grande
+Hero(
+  tag: 'imagen_${producto.id}',
+  child: Image.network(producto.imagenUrl, width: double.infinity),
+)
+
+// La animacion Hero se activa automaticamente al hacer push/pop
+// No se necesita codigo adicional — Flutter la detecta por el tag coincidente
+Navigator.push(
+  context,
+  MaterialPageRoute(builder: (_) => PantallaDetalle(producto: producto)),
+);
+
+// IMPORTANTE: el mismo tag dos veces en la misma pantalla provoca assertion error
+```
+
+> **Mini-ejercicio (5 min):** Crea una lista de 3 cajas de colores distintos, cada una con
+> un `Hero` de tag `'caja_$i'`. Al tocar una caja navega a una pantalla de detalle que
+> muestra la misma caja ampliada a 200x200. Observa la animacion de expansion.
+> Luego agrega un segundo `Hero` con tag `'nombre_$i'` para un `Text` debajo de cada caja
+> y verifica que el nombre tambien viaja a la pantalla de detalle.
+
+---
+
+### Patron 5 — `PageRouteBuilder`: transición de página personalizada
+
+```dart
+Navigator.push(
+  context,
+  PageRouteBuilder(
+    transitionDuration: const Duration(milliseconds: 500),
+    reverseTransitionDuration: const Duration(milliseconds: 300),  // duracion al volver
+    pageBuilder: (context, animation, secondaryAnimation) =>
+        const PantallaDestino(),
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      // Slide desde abajo
+      final tween = Tween(begin: const Offset(0, 1), end: Offset.zero)
+          .chain(CurveTween(curve: Curves.easeOut));
+      return SlideTransition(
+        position: animation.drive(tween),
+        child: child,
+      );
+    },
+  ),
+);
+
+// Alternativa: FadeTransition
+FadeTransition(opacity: animation, child: child)
+
+// Alternativa: ScaleTransition desde el centro
+ScaleTransition(scale: animation, child: child)
+
+// Combinacion slide + fade
+return SlideTransition(
+  position: animation.drive(tween),
+  child: FadeTransition(opacity: animation, child: child),
+);
+```
+
+> **Mini-ejercicio (5 min):** Cambia `Offset(0, 1)` a `Offset(1, 0)` y observa el slide
+> desde la derecha. Luego combina `SlideTransition` con `FadeTransition` envolviendo el hijo:
+> el resultado debe deslizarse Y fundirse al mismo tiempo. Ajusta `transitionDuration` a 800ms
+> para ver el efecto con mas detalle.
+
+---
+
+### Patron 6 — `Lottie`: animaciones JSON desde LottieFiles
+
+```dart
+import 'package:lottie/lottie.dart';
+
+// Desde asset (declarado en pubspec.yaml bajo flutter.assets)
+Lottie.asset('assets/lottie/loading.json')
+
+// Desde URL — no requiere declaracion en pubspec
+Lottie.network('https://assets5.lottiefiles.com/packages/lf20_usmfx6bp.json')
+
+// Con AnimationController para control manual
+LottieBuilder.asset(
+  'assets/lottie/success.json',
+  controller: _ctrl,
+  onLoaded: (composition) {
+    // Establecer la duracion real del JSON antes de reproducir
+    _ctrl.duration = composition.duration;
+    _ctrl.forward();
+  },
+)
+
+// Opciones comunes
+Lottie.asset(
+  'assets/lottie/loading.json',
+  width: 200,
+  height: 200,
+  fit: BoxFit.contain,
+  repeat: true,    // loop automatico
+  reverse: false,
+)
+```
+
+> **Mini-ejercicio (6 min):** Usa `Lottie.network` con una URL de LottieFiles para mostrar
+> una animacion sin necesidad de assets locales. Agrega `repeat: false` y un boton que llame
+> `_ctrl.forward()` para reproducir desde el inicio al pulsar. Observa la diferencia entre
+> `Lottie.asset` (requiere pubspec) y `Lottie.network` (no requiere).
+
+---
+
+## Crea el proyecto
 
 ```bash
-flutter create animaciones_app
-cd animaciones_app
+flutter create modulo18_animaciones
+cd modulo18_animaciones
+mkdir -p assets/lottie
+# Descarga un .json de https://lottiefiles.com/featured y colócalo en assets/lottie/
+flutter pub get
 ```
 
 ### `pubspec.yaml`
 
 ```yaml
-name: animaciones_app
-description: "Demo de animaciones en Flutter"
+name: modulo18_animaciones
+description: "Demo de animaciones en Flutter — Modulo 18"
 publish_to: none
 version: 1.0.0+1
 
@@ -26,7 +295,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_riverpod: ^3.3.0
-  lottie:           ^3.1.3   # animaciones Lottie (JSON)
+  lottie: ^3.1.3
 
 dev_dependencies:
   flutter_test:
@@ -36,597 +305,422 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/lottie/      # carpeta para archivos .json de Lottie
+    - assets/lottie/
 ```
 
-```bash
-# Crear la carpeta de assets
-mkdir -p assets/lottie
-flutter pub get
-```
-
----
-
-## Estructura final del proyecto
+### Configuración de assets
 
 ```
-animaciones_app/
+modulo18_animaciones/
 ├── assets/
 │   └── lottie/
-│       └── loading.json          ← descargar de lottiefiles.com
-├── lib/
-│   ├── main.dart
-│   └── features/
-│       ├── paso1_implicity.dart  ← AnimatedContainer, AnimatedOpacity, etc.
-│       ├── paso2_explicit.dart   ← AnimationController + Tween
-│       ├── paso3_hero.dart       ← Hero transitions
-│       ├── paso4_page.dart       ← PageRouteBuilder
-│       └── paso5_lottie.dart     ← Lottie
+│       ├── loading.json    ← descargar de lottiefiles.com (ej: "loading spinner")
+│       └── success.json    ← descargar de lottiefiles.com (ej: "checkmark success")
 └── pubspec.yaml
 ```
 
+Para descargar assets Lottie: ir a `https://lottiefiles.com/featured`, elegir una animacion,
+pulsar "Download" → "Lottie JSON" y colocar el archivo en `assets/lottie/`.
+
 ---
 
-## Paso 1 — App mínima
+## Selector de pasos
 
-**`lib/main.dart`** — reemplaza todo:
+Cada paso es un `main.dart` completo e independiente. Para probar un paso especifico,
+cambia el valor de la constante en la parte superior del archivo:
 
 ```dart
+// Cambia este valor (1–5) para probar cada demo
+const int paso = 1;
+```
+
+Esto permite ejecutar `flutter run` y ver cada concepto de forma aislada antes de
+ensamblar el proyecto final.
+
+---
+
+## Paso 1 — Animaciones implícitas
+
+```dart
+// lib/main.dart
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-void main() {
-  runApp(const ProviderScope(child: AnimacionesApp()));
-}
+// Cambia este valor (1–5) para probar cada demo
+const int paso = 1;
 
-class AnimacionesApp extends StatelessWidget {
-  const AnimacionesApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Animaciones',
+void main() => runApp(const MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
-        useMaterial3: true,
-      ),
-      home: const PantallaMenu(),
-    );
-  }
+      home: PasoUno(),
+    ));
+
+class PasoUno extends StatefulWidget {
+  const PasoUno({super.key});
+  @override
+  State<PasoUno> createState() => _PasoUnoState();
 }
 
-class PantallaMenu extends StatelessWidget {
-  const PantallaMenu({super.key});
+class _PasoUnoState extends State<PasoUno> {
+  bool _expandido = false;
+  bool _visible = true;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Animaciones')),
-      body: const Center(child: Text('Paso 1 — App funcionando ✅')),
+      appBar: AppBar(title: const Text('Paso 1 — Animaciones implicitas')),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // AnimatedContainer: cambia tamaño, color y radio suavemente
+            GestureDetector(
+              onTap: () => setState(() => _expandido = !_expandido),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 400),
+                curve: Curves.easeInOut,
+                width: _expandido ? 200.0 : 80.0,
+                height: _expandido ? 200.0 : 80.0,
+                decoration: BoxDecoration(
+                  color: _expandido ? Colors.blue : Colors.red,
+                  borderRadius: BorderRadius.circular(_expandido ? 32 : 8),
+                ),
+                child: const Icon(Icons.star, color: Colors.white),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Toca la caja para expandir',
+              style: TextStyle(color: Colors.grey),
+            ),
+
+            const SizedBox(height: 40),
+
+            // AnimatedOpacity: fade in/out
+            AnimatedOpacity(
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.elasticOut,
+              opacity: _visible ? 1.0 : 0.0,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  'Aparezco y desaparezco',
+                  style: TextStyle(fontSize: 18),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => setState(() => _visible = !_visible),
+              child: Text(_visible ? 'Ocultar' : 'Mostrar'),
+            ),
+
+            const SizedBox(height: 40),
+
+            // AnimatedPadding: padding animado
+            AnimatedPadding(
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeInOut,
+              padding: EdgeInsets.all(_expandido ? 32.0 : 8.0),
+              child: Container(
+                color: Colors.orange.shade200,
+                child: const Icon(Icons.favorite, size: 32),
+              ),
+            ),
+            const Text(
+              'AnimatedPadding — toca la caja de arriba',
+              style: TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => setState(() => _expandido = !_expandido),
+        child: Icon(_expandido ? Icons.compress : Icons.expand),
+      ),
     );
   }
 }
 ```
 
-```bash
-flutter run
-# Debe mostrar "Paso 1 — App funcionando ✅"
-```
+> **Prueba esto:** Toca la caja roja — debe crecer, volverse azul y redondear sus esquinas
+> suavemente con efecto `easeInOut`. Toca el boton "Ocultar" — el texto verde debe fundirse.
+> Observa como `AnimatedPadding` reacciona al mismo estado `_expandido` sin codigo extra.
+
+Salida esperada: la caja pasa de 80x80 (roja, esquinas rectas) a 200x200 (azul, esquinas muy
+redondeadas) en 400ms. El texto verde hace fade out en 400ms con curva `elasticOut`.
 
 ---
 
-## Paso 2 — Animaciones implícitas
-
-Las animaciones **implícitas** son las más sencillas de usar.
-Flutter interpola automáticamente entre valores cuando cambian.
-No necesitas `AnimationController` ni `Ticker`:
-
-```
-AnimatedContainer    → cambia tamaño, color, decoración
-AnimatedOpacity      → cambia transparencia
-AnimatedPadding      → cambia espacio interior
-AnimatedAlign        → cambia posición
-AnimatedCrossFade    → alterna entre dos widgets
-AnimatedSwitcher     → anima el cambio de cualquier widget
-AnimatedDefaultTextStyle → cambia estilo de texto
-```
-
-**Crea `lib/features/paso1_implicity.dart`:**
+## Paso 2 — `AnimatedSwitcher` con transiciones
 
 ```dart
+// lib/main.dart
 import 'package:flutter/material.dart';
 
-class PasoAnimacionesImplicitas extends StatefulWidget {
-  const PasoAnimacionesImplicitas({super.key});
+void main() => runApp(const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: PasoDos(),
+    ));
 
+class PasoDos extends StatefulWidget {
+  const PasoDos({super.key});
   @override
-  State<PasoAnimacionesImplicitas> createState() =>
-      _PasoAnimacionesImplicitasState();
+  State<PasoDos> createState() => _PasosDosState();
 }
 
-class _PasoAnimacionesImplicitasState
-    extends State<PasoAnimacionesImplicitas> {
-  // Estado que controla las animaciones
-  bool _expandido   = false;
-  bool _visible     = true;
-  bool _alineadoDerecha = false;
-  bool _destacado   = false;
-  int  _colorIndice = 0;
-
-  static const _colores = [
-    Colors.teal,
-    Colors.deepOrange,
-    Colors.purple,
-    Colors.indigo,
-  ];
+class _PasosDosState extends State<PasoDos> {
+  int _contador = 0;
+  bool _mostrarA = true;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Animaciones implícitas')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-
-            // ── AnimatedContainer ────────────────────────────────
-            _Seccion('AnimatedContainer'),
-            Text(
-              'Cambia tamaño, color y bordes automáticamente.',
-              style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            Center(
-              child: AnimatedContainer(
-                // Duración de la animación — obligatoria
-                duration: const Duration(milliseconds: 400),
-                // Curva de interpolación (optional, default = linear)
-                curve: Curves.easeInOut,
-
-                width:  _expandido ? 250 : 100,
-                height: _expandido ? 150 : 100,
-                decoration: BoxDecoration(
-                  color:        _colores[_colorIndice],
-                  borderRadius: BorderRadius.circular(
-                      _expandido ? 32 : 8),
-                  boxShadow: _expandido
-                      ? [BoxShadow(
-                          color:     _colores[_colorIndice].withOpacity(0.4),
-                          blurRadius: 20,
-                          offset:    const Offset(0, 8),
-                        )]
-                      : [],
-                ),
-                child: Center(
-                  child: Text(
-                    _expandido ? 'Grande' : 'Pequeño',
-                    style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
-                ),
+      appBar: AppBar(title: const Text('Paso 2 — AnimatedSwitcher')),
+      body: GestureDetector(
+        // Toca en cualquier lugar para incrementar el contador
+        onTap: () => setState(() => _contador++),
+        behavior: HitTestBehavior.opaque,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'Toca la pantalla para contar',
+                style: TextStyle(color: Colors.grey),
               ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                FilledButton(
-                  onPressed: () => setState(() => _expandido = !_expandido),
-                  child: Text(_expandido ? 'Encoger' : 'Expandir'),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton(
-                  onPressed: () => setState(() =>
-                      _colorIndice = (_colorIndice + 1) % _colores.length),
-                  child: const Text('Cambiar color'),
-                ),
-              ],
-            ),
+              const SizedBox(height: 24),
 
-            const SizedBox(height: 24),
-
-            // ── AnimatedOpacity ──────────────────────────────────
-            _Seccion('AnimatedOpacity'),
-            Center(
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 500),
-                opacity:  _visible ? 1.0 : 0.0,
-                child: Container(
-                  width: 200, height: 80,
-                  decoration: BoxDecoration(
-                    color:        cs.primaryContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Center(
-                    child: Text('Soy visible',
-                        style: TextStyle(color: cs.onPrimaryContainer,
-                            fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Center(
-              child: FilledButton.tonal(
-                onPressed: () => setState(() => _visible = !_visible),
-                child: Text(_visible ? 'Ocultar' : 'Mostrar'),
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // ── AnimatedAlign ────────────────────────────────────
-            _Seccion('AnimatedAlign'),
-            Container(
-              height: 80,
-              decoration: BoxDecoration(
-                color:        cs.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: AnimatedAlign(
-                duration:  const Duration(milliseconds: 600),
-                curve:     Curves.bounceOut,
-                alignment: _alineadoDerecha
-                    ? Alignment.centerRight
-                    : Alignment.centerLeft,
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Container(
-                    width: 56, height: 56,
-                    decoration: BoxDecoration(
-                      color:  cs.primary,
-                      shape:  BoxShape.circle,
-                    ),
-                    child: Icon(Icons.circle, color: cs.onPrimary),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Center(
-              child: FilledButton.tonal(
-                onPressed: () =>
-                    setState(() => _alineadoDerecha = !_alineadoDerecha),
-                child: const Text('Mover'),
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // ── AnimatedDefaultTextStyle ──────────────────────────
-            _Seccion('AnimatedDefaultTextStyle'),
-            Center(
-              child: AnimatedDefaultTextStyle(
+              // ScaleTransition personalizado — KEY obligatoria para detectar cambio
+              AnimatedSwitcher(
                 duration: const Duration(milliseconds: 300),
-                style: TextStyle(
-                  fontSize:   _destacado ? 28 : 16,
-                  fontWeight: _destacado
-                      ? FontWeight.bold
-                      : FontWeight.normal,
-                  color: _destacado ? cs.primary : cs.onSurface,
+                transitionBuilder: (child, animation) => ScaleTransition(
+                  scale: animation,
+                  child: child,
                 ),
-                child: const Text('Texto animado'),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Center(
-              child: FilledButton.tonal(
-                onPressed: () =>
-                    setState(() => _destacado = !_destacado),
-                child: const Text('Destacar'),
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // ── AnimatedSwitcher ─────────────────────────────────
-            _Seccion('AnimatedSwitcher'),
-            Text(
-              'Anima el cambio entre cualquier par de widgets.',
-              style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            Center(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 400),
-                // transitionBuilder personaliza el tipo de animación
-                transitionBuilder: (child, animation) => FadeTransition(
-                  opacity: animation,
-                  child: ScaleTransition(scale: animation, child: child),
+                child: Text(
+                  '$_contador',
+                  // Sin ValueKey la animacion NO dispara aunque cambie el numero
+                  key: ValueKey<int>(_contador),
+                  style: const TextStyle(
+                    fontSize: 72,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.deepPurple,
+                  ),
                 ),
-                child: _destacado
+              ),
+
+              const SizedBox(height: 48),
+              const Divider(),
+              const SizedBox(height: 24),
+
+              const Text(
+                'Alternancia entre dos widgets',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+
+              // FadeTransition (default) entre dos Containers de colores
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 500),
+                child: _mostrarA
                     ? Container(
-                        key: const ValueKey('grande'),
-                        width: 120, height: 120,
-                        decoration: BoxDecoration(
-                          color:        cs.primary,
-                          borderRadius: BorderRadius.circular(20),
+                        key: const ValueKey<String>('A'),
+                        width: 120,
+                        height: 120,
+                        color: Colors.teal,
+                        child: const Center(
+                          child: Text(
+                            'Widget A',
+                            style: TextStyle(color: Colors.white, fontSize: 18),
+                          ),
                         ),
-                        child: Icon(Icons.star,
-                            color: cs.onPrimary, size: 48),
                       )
                     : Container(
-                        key: const ValueKey('pequenio'),
-                        width: 60, height: 60,
-                        decoration: BoxDecoration(
-                          color:        cs.primaryContainer,
-                          borderRadius: BorderRadius.circular(10),
+                        key: const ValueKey<String>('B'),
+                        width: 120,
+                        height: 120,
+                        color: Colors.orange,
+                        child: const Center(
+                          child: Text(
+                            'Widget B',
+                            style: TextStyle(color: Colors.white, fontSize: 18),
+                          ),
                         ),
-                        child: Icon(Icons.star_border,
-                            color: cs.primary),
                       ),
               ),
-            ),
-            const SizedBox(height: 80),
-          ],
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => setState(() => _mostrarA = !_mostrarA),
+                child: Text(_mostrarA ? 'Mostrar Widget B' : 'Mostrar Widget A'),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Sin ValueKey la animacion no se activa\n'
+                'aunque el widget cambie de tipo',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
-
-class _Seccion extends StatelessWidget {
-  final String texto;
-  const _Seccion(this.texto);
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Text(texto,
-        style: Theme.of(context)
-            .textTheme
-            .titleSmall
-            ?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.primary)),
-  );
-}
 ```
 
-Agrega navegación en `PantallaMenu`:
+> **Prueba esto:** Toca la pantalla varias veces rapidamente — cada numero debe aparecer con
+> un efecto de escala desde 0 hasta 1. Pulsa "Mostrar Widget B" — el contenedor teal debe
+> fundirse y aparecer el naranja.
 
-```dart
-// lib/main.dart — reemplaza PantallaMenu
-
-import 'features/paso1_implicity.dart';
-
-class PantallaMenu extends StatelessWidget {
-  const PantallaMenu({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Animaciones')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _ItemMenu(
-            titulo: '1 — Animaciones implícitas',
-            subtitulo: 'AnimatedContainer, AnimatedOpacity...',
-            onTap: () => Navigator.push(context,
-                MaterialPageRoute(
-                    builder: (_) =>
-                        const PasoAnimacionesImplicitas())),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ItemMenu extends StatelessWidget {
-  final String       titulo;
-  final String       subtitulo;
-  final VoidCallback onTap;
-
-  const _ItemMenu({
-    required this.titulo,
-    required this.subtitulo,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) => Card(
-    margin: const EdgeInsets.only(bottom: 8),
-    child: ListTile(
-      title:    Text(titulo,
-          style: const TextStyle(fontWeight: FontWeight.bold)),
-      subtitle: Text(subtitulo),
-      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-      onTap:    onTap,
-    ),
-  );
-}
-```
-
-```bash
-flutter run
-# Toca "1 — Animaciones implícitas"
-# → Presiona "Expandir/Encoger" → el container cambia de tamaño suavemente
-# → Presiona "Cambiar color" → el color cambia con interpolación
-# → Presiona "Ocultar/Mostrar" → el widget se desvanece
-# → Presiona "Mover" → el círculo se desliza con rebote (Curves.bounceOut)
-# → Presiona "Destacar" → texto crece y el AnimatedSwitcher intercambia widgets
-```
+Salida esperada: el contador salta con animacion de escala en cada toque. El `AnimatedSwitcher`
+inferior hace crossfade entre los dos contenedores. Si remueves las `ValueKey`, el contador
+cambia de numero pero sin animacion — ese es el comportamiento erroneo a evitar.
 
 ---
 
-## Paso 3 — Animaciones explícitas
-
-Las animaciones **explícitas** te dan control total sobre la
-animación: cuándo empieza, cuándo para, cuántas veces se repite.
-Requieren `AnimationController` + `Tween`:
-
-```
-AnimationController  → controla duración, dirección y estado
-Tween<T>             → define el rango de valores (inicio → fin)
-CurvedAnimation      → aplica una curva al controlador
-AnimatedBuilder      → reconstruye el widget en cada frame
-```
-
-**Crea `lib/features/paso2_explicit.dart`:**
+## Paso 3 — Animación explícita con `AnimationController`
 
 ```dart
+// lib/main.dart
+import 'dart:math';
 import 'package:flutter/material.dart';
 
-class PasoAnimacionesExplicitas extends StatefulWidget {
-  const PasoAnimacionesExplicitas({super.key});
+void main() => runApp(const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: PasoTres(),
+    ));
 
+class PasoTres extends StatefulWidget {
+  const PasoTres({super.key});
   @override
-  State<PasoAnimacionesExplicitas> createState() =>
-      _PasoAnimacionesExplicitasState();
+  State<PasoTres> createState() => _PasoTresState();
 }
 
-class _PasoAnimacionesExplicitasState
-    extends State<PasoAnimacionesExplicitas>
-    with SingleTickerProviderStateMixin {
-  // SingleTickerProviderStateMixin provee el "ticker" que
-  // sincroniza la animación con los frames de la pantalla
-
-  late final AnimationController _ctrl;
-
-  // Tweens — rangos de valores para cada propiedad animada
-  late final Animation<double>  _escala;
-  late final Animation<double>  _rotacion;
-  late final Animation<Color?>  _color;
-  late final Animation<double>  _opacidad;
+// SingleTickerProviderStateMixin provee el vsync para UN AnimationController
+class _PasoTresState extends State<PasoTres> with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _rotacion;
+  late Animation<Color?> _color;
+  String _estadoTexto = 'Detenido';
 
   @override
   void initState() {
     super.initState();
-
     _ctrl = AnimationController(
-      vsync:    this,          // this es el TickerProvider
-      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+      duration: const Duration(seconds: 2),
     );
 
-    // CurvedAnimation aplica una curva al controlador (0.0 → 1.0)
-    final curveAnim = CurvedAnimation(
-      parent: _ctrl,
-      curve:  Curves.elasticOut,
+    // Tween de rotacion: 0 a 2π (una vuelta completa)
+    _rotacion = Tween<double>(begin: 0, end: 2 * pi).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.linear),
     );
 
-    // Cada Tween interpola entre dos valores
-    _escala = Tween<double>(begin: 0.5, end: 1.0).animate(curveAnim);
+    // ColorTween: azul a rojo
+    _color = ColorTween(begin: Colors.blue, end: Colors.red).animate(_ctrl);
 
-    _rotacion = Tween<double>(
-      begin: 0.0,
-      end:   2 * 3.14159,    // 360 grados en radianes
-    ).animate(CurvedAnimation(
-      parent: _ctrl,
-      curve:  Curves.easeInOut,
-    ));
-
-    _color = ColorTween(
-      begin: Colors.teal,
-      end:   Colors.deepOrange,
-    ).animate(CurvedAnimation(
-      parent: _ctrl,
-      curve:  Curves.easeIn,
-    ));
-
-    _opacidad = Tween<double>(begin: 0.0, end: 1.0)
-        .animate(CurvedAnimation(
-          parent: _ctrl,
-          // Interval: esta animación solo ocurre entre 0% y 50% del total
-          curve:  const Interval(0.0, 0.5, curve: Curves.easeIn),
-        ));
+    // Escuchar cambios de estado para actualizar el texto
+    _ctrl.addStatusListener((status) {
+      setState(() {
+        switch (status) {
+          case AnimationStatus.forward:
+            _estadoTexto = 'Reproduciendo...';
+          case AnimationStatus.reverse:
+            _estadoTexto = 'Regresando...';
+          case AnimationStatus.completed:
+            _estadoTexto = 'Completado';
+          case AnimationStatus.dismissed:
+            _estadoTexto = 'Detenido';
+        }
+      });
+    });
   }
 
   @override
   void dispose() {
-    _ctrl.dispose();   // SIEMPRE liberar el controller
+    _ctrl.dispose();    // liberar el ticker — obligatorio
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Animaciones explícitas')),
+      appBar: AppBar(title: const Text('Paso 3 — Animacion Explicita')),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-
-            // AnimatedBuilder reconstruye SOLO este subtree
-            // en cada frame — más eficiente que setState
+            // AnimatedBuilder reconstruye solo este subarbol en cada frame
             AnimatedBuilder(
               animation: _ctrl,
               builder: (context, child) {
-                return Opacity(
-                  opacity: _opacidad.value,
-                  child: Transform.scale(
-                    scale: _escala.value,
-                    child: Transform.rotate(
+                return Column(
+                  children: [
+                    Transform.rotate(
                       angle: _rotacion.value,
                       child: Container(
-                        width:  120,
+                        width: 120,
                         height: 120,
                         decoration: BoxDecoration(
-                          color:        _color.value,
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color:      (_color.value ?? Colors.teal)
-                                  .withOpacity(0.4),
-                              blurRadius: 20,
-                              offset:     const Offset(0, 8),
-                            ),
-                          ],
+                          color: _color.value,
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                        // child estático — no se reconstruye en cada frame
-                        child: child,
+                        child: const Icon(
+                          Icons.settings,
+                          size: 64,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 16),
+                    // Progreso numerico del controlador (0.0 a 1.0)
+                    Text(
+                      '${(_ctrl.value * 100).round()}%',
+                      style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                    ),
+                  ],
                 );
               },
-              // El child estático se pasa aquí — se construye una sola vez
-              child: const Icon(Icons.flutter_dash,
-                  color: Colors.white, size: 60),
             ),
 
-            const SizedBox(height: 40),
+            const SizedBox(height: 8),
+            Text(
+              _estadoTexto,
+              style: const TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 32),
 
-            // Controles de la animación
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            // Botones de control
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
               children: [
-                FilledButton(
-                  onPressed: () => _ctrl.forward(from: 0.0),
-                  child: const Text('Reproducir'),
+                ElevatedButton(
+                  onPressed: () => _ctrl.forward(),
+                  child: const Text('Play Forward'),
                 ),
-                const SizedBox(width: 8),
-                OutlinedButton(
+                ElevatedButton(
                   onPressed: () => _ctrl.reverse(),
-                  child: const Text('Reversa'),
+                  child: const Text('Reverse'),
                 ),
-                const SizedBox(width: 8),
-                FilledButton.tonal(
+                ElevatedButton(
                   onPressed: () => _ctrl.repeat(reverse: true),
-                  child: const Text('Loop'),
+                  child: const Text('Ping-Pong'),
+                ),
+                ElevatedButton(
+                  onPressed: () => _ctrl.stop(),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  child: const Text(
+                    'Stop',
+                    style: TextStyle(color: Colors.white),
+                  ),
                 ),
               ],
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: () => _ctrl.stop(),
-              child: const Text('Detener'),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Mostrar el valor actual del controlador
-            AnimatedBuilder(
-              animation: _ctrl,
-              builder: (_, __) => Text(
-                'Progreso: ${(_ctrl.value * 100).toStringAsFixed(0)}%',
-                style: const TextStyle(fontSize: 16),
-              ),
             ),
           ],
         ),
@@ -636,159 +730,142 @@ class _PasoAnimacionesExplicitasState
 }
 ```
 
-Añade la entrada al menú en `main.dart`:
+> **Prueba esto:** Pulsa "Play Forward" — el engranaje debe rotar y cambiar de azul a rojo
+> mostrando el porcentaje. Pulsa "Ping-Pong" para animacion continua de ida y vuelta.
+> Pulsa "Stop" para congelar en el frame actual.
 
-```dart
-// lib/main.dart — añadir dentro de ListView de PantallaMenu
-
-import 'features/paso2_explicit.dart';
-
-// Añadir después del primer _ItemMenu:
-_ItemMenu(
-  titulo:   '2 — Animaciones explícitas',
-  subtitulo: 'AnimationController, Tween, CurvedAnimation',
-  onTap: () => Navigator.push(context,
-      MaterialPageRoute(
-          builder: (_) =>
-              const PasoAnimacionesExplicitas())),
-),
-```
-
-```bash
-flutter run
-# → Presiona "Reproducir" → el ícono aparece rotando y escalando
-# → Presiona "Reversa" → vuelve al estado inicial
-# → Presiona "Loop" → cicla hacia adelante y atrás indefinidamente
-# → Presiona "Detener" → para en el frame actual
-# → El porcentaje de progreso muestra el valor del controller en tiempo real
-```
+Salida esperada: el icono `Icons.settings` rota 360° en 2 segundos cambiando de azul a rojo.
+El texto de porcentaje va de `0%` a `100%`. El `addStatusListener` actualiza `_estadoTexto`
+en cada cambio de estado del controlador.
 
 ---
 
-## Paso 4 — Animaciones Hero
-
-`Hero` anima la transición de un widget entre dos rutas.
-El sistema busca el `Hero` con el mismo `tag` en ambas pantallas
-y anima la transición del tamaño y posición automáticamente:
-
-**Crea `lib/features/paso3_hero.dart`:**
+## Paso 4 — Hero: transición entre pantallas
 
 ```dart
+// lib/main.dart
 import 'package:flutter/material.dart';
 
-// Datos de ejemplo — servidores con "avatar" que hace Hero
-class _ServidorItem {
-  final String id;
-  final String nombre;
-  final String ip;
-  final Color  color;
-  final IconData icono;
+void main() => runApp(const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: PasosCuatro(),
+    ));
 
-  const _ServidorItem({
-    required this.id,
-    required this.nombre,
-    required this.ip,
-    required this.color,
-    required this.icono,
-  });
-}
-
-const _servidores = [
-  _ServidorItem(id: '1', nombre: 'prod-web-01',
-      ip: '10.0.2.10', color: Colors.teal,       icono: Icons.web),
-  _ServidorItem(id: '2', nombre: 'prod-db-01',
-      ip: '10.0.2.20', color: Colors.deepOrange,  icono: Icons.storage),
-  _ServidorItem(id: '3', nombre: 'cache-redis',
-      ip: '10.0.2.30', color: Colors.purple,      icono: Icons.memory),
+// Datos de las tarjetas
+const List<Map<String, dynamic>> _tarjetas = [
+  {'id': 0, 'color': Colors.red, 'nombre': 'Roja'},
+  {'id': 1, 'color': Colors.green, 'nombre': 'Verde'},
+  {'id': 2, 'color': Colors.blue, 'nombre': 'Azul'},
+  {'id': 3, 'color': Colors.orange, 'nombre': 'Naranja'},
+  {'id': 4, 'color': Colors.purple, 'nombre': 'Purpura'},
+  {'id': 5, 'color': Colors.teal, 'nombre': 'Teal'},
 ];
 
-// Pantalla de lista
-class PasoHeroLista extends StatelessWidget {
-  const PasoHeroLista({super.key});
+class PasosCuatro extends StatelessWidget {
+  const PasosCuatro({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Hero — Lista')),
-      body: ListView.builder(
-        padding:     const EdgeInsets.all(16),
-        itemCount:   _servidores.length,
-        itemBuilder: (_, i) {
-          final s = _servidores[i];
-          return Card(
-            margin: const EdgeInsets.only(bottom: 12),
-            child: ListTile(
-              contentPadding: const EdgeInsets.all(12),
-              // El Hero envuelve el avatar — debe tener el mismo tag en destino
-              leading: Hero(
-                tag: 'avatar-${s.id}',    // tag único por elemento
-                child: CircleAvatar(
-                  radius:          28,
-                  backgroundColor: s.color,
-                  child: Icon(s.icono, color: Colors.white, size: 24),
+      appBar: AppBar(title: const Text('Paso 4 — Hero Transitions')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: GridView.builder(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+          ),
+          itemCount: _tarjetas.length,
+          itemBuilder: (context, i) {
+            final tarjeta = _tarjetas[i];
+            return GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => PantallaDetalle(tarjeta: tarjeta),
+                  ),
+                );
+              },
+              child: Hero(
+                // tag unico por elemento — mismo tag en origen y destino
+                tag: 'card_${tarjeta['id']}',
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: tarjeta['color'] as Color,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.palette, color: Colors.white, size: 32),
+                      const SizedBox(height: 8),
+                      // El Hero del nombre viaja independientemente
+                      Hero(
+                        tag: 'nombre_${tarjeta['id']}',
+                        child: Material(
+                          color: Colors.transparent,
+                          child: Text(
+                            tarjeta['nombre'] as String,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              title:    Text(s.nombre,
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text(s.ip),
-              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => PasoHeroDetalle(servidor: s),
-                ),
-              ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
 }
 
-// Pantalla de detalle
-class PasoHeroDetalle extends StatelessWidget {
-  final _ServidorItem servidor;
-  const PasoHeroDetalle({super.key, required this.servidor});
+class PantallaDetalle extends StatelessWidget {
+  final Map<String, dynamic> tarjeta;
+  const PantallaDetalle({super.key, required this.tarjeta});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(servidor.nombre)),
+      appBar: AppBar(
+        title: Text('Detalle — ${tarjeta['nombre']}'),
+        backgroundColor: tarjeta['color'] as Color,
+        foregroundColor: Colors.white,
+      ),
       body: Column(
         children: [
-          // Hero en destino — mismo tag, tamaño mayor
+          // Hero con el mismo tag expande la tarjeta a pantalla completa
           Hero(
-            tag: 'avatar-${servidor.id}',
+            tag: 'card_${tarjeta['id']}',
             child: Container(
-              width:  double.infinity,
-              height: 220,
-              color:  servidor.color,
-              child: Icon(servidor.icono,
-                  color: Colors.white.withOpacity(0.8), size: 100),
+              width: double.infinity,
+              height: 300,
+              color: tarjeta['color'] as Color,
+              child: const Icon(Icons.palette, color: Colors.white, size: 80),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(servidor.nombre,
-                    style: Theme.of(context).textTheme.headlineSmall
-                        ?.copyWith(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                Text('IP: ${servidor.ip}',
-                    style: Theme.of(context).textTheme.bodyLarge),
-                const SizedBox(height: 24),
-                FilledButton.icon(
-                  onPressed: () => Navigator.pop(context),
-                  icon:  const Icon(Icons.arrow_back),
-                  label: const Text('Volver'),
-                  style: FilledButton.styleFrom(
-                      backgroundColor: servidor.color),
-                ),
-              ],
+          const SizedBox(height: 24),
+          Hero(
+            tag: 'nombre_${tarjeta['id']}',
+            child: Material(
+              child: Text(
+                tarjeta['nombre'] as String,
+                style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+              ),
             ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Pulsa Atras para volver con animacion Hero inversa',
+            style: TextStyle(color: Colors.grey),
           ),
         ],
       ),
@@ -797,163 +874,343 @@ class PasoHeroDetalle extends StatelessWidget {
 }
 ```
 
-Añade al menú:
+> **Prueba esto:** Toca cualquier tarjeta de la grilla — la caja de color debe "volar" desde
+> su posicion hasta ocupar la parte superior de la pantalla de detalle. Al pulsar Atras, el
+> elemento regresa a su lugar original. Observa que el nombre tambien viaja con su propio Hero.
 
-```dart
-// lib/main.dart — añadir a PantallaMenu
-
-import 'features/paso3_hero.dart';
-
-_ItemMenu(
-  titulo:   '3 — Hero transitions',
-  subtitulo: 'Animación compartida entre pantallas',
-  onTap: () => Navigator.push(context,
-      MaterialPageRoute(builder: (_) => const PasoHeroLista())),
-),
-```
-
-```bash
-flutter run
-# → Toca cualquier servidor de la lista
-# → El avatar circular vuela hasta convertirse en el banner del detalle
-# → Presiona "Volver" → el banner encoge de vuelta al avatar circular
-# El efecto es automático — Flutter solo necesita el mismo tag en ambas pantallas
-```
+Salida esperada: al tocar una tarjeta, la caja de color se expande fluidamente desde 160px en
+la grilla hasta 300px de alto en la pantalla de detalle. No se necesita codigo de animacion
+adicional — Flutter calcula la interpolacion automaticamente por el tag coincidente.
 
 ---
 
-## Paso 5 — Transiciones de página personalizadas
+## Paso 5 — App completa con 4 pestañas
 
 ```dart
-// Añadir al menú en main.dart — no necesita archivo separado
-
-// PageRouteBuilder permite customizar la transición de navegación
-void _navegar(BuildContext context, Widget pantalla,
-    {String tipo = 'fade'}) {
-  Navigator.push(
-    context,
-    PageRouteBuilder(
-      pageBuilder: (_, __, ___) => pantalla,
-      transitionDuration: const Duration(milliseconds: 500),
-      transitionsBuilder: (_, animation, __, child) {
-        return switch (tipo) {
-          'slide' => SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(1, 0),
-                end:   Offset.zero,
-              ).animate(CurvedAnimation(
-                  parent: animation, curve: Curves.easeOut)),
-              child: child,
-            ),
-          'scale' => ScaleTransition(
-              scale: CurvedAnimation(
-                  parent: animation, curve: Curves.elasticOut),
-              child: child,
-            ),
-          'fade' => FadeTransition(opacity: animation, child: child),
-          _ => child,
-        };
-      },
-    ),
-  );
-}
-
-// Añadir estas entradas al ListView de PantallaMenu:
-_ItemMenu(
-  titulo:   '4a — Transición slide',
-  subtitulo: 'Desliza desde la derecha',
-  onTap: () => _navegar(context,
-      const _PantallaDemo(titulo: 'Slide', color: Colors.indigo),
-      tipo: 'slide'),
-),
-_ItemMenu(
-  titulo:   '4b — Transición scale',
-  subtitulo: 'Aparece escalando desde el centro',
-  onTap: () => _navegar(context,
-      const _PantallaDemo(titulo: 'Scale', color: Colors.deepOrange),
-      tipo: 'scale'),
-),
-_ItemMenu(
-  titulo:   '4c — Transición fade',
-  subtitulo: 'Fundido de entrada',
-  onTap: () => _navegar(context,
-      const _PantallaDemo(titulo: 'Fade', color: Colors.teal),
-      tipo: 'fade'),
-),
-
-// Widget de pantalla de demo reutilizable
-class _PantallaDemo extends StatelessWidget {
-  final String titulo;
-  final Color  color;
-  const _PantallaDemo({required this.titulo, required this.color});
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: color,
-    body: Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(titulo,
-              style: const TextStyle(
-                  color: Colors.white, fontSize: 40,
-                  fontWeight: FontWeight.bold)),
-          const SizedBox(height: 24),
-          FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: color),
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Volver'),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-```
-
-```bash
-flutter run
-# → Toca "Transición slide" → pantalla entra deslizando desde la derecha
-# → Toca "Transición scale" → pantalla aparece creciendo con efecto elástico
-# → Toca "Transición fade" → pantalla aparece con fundido
-```
-
----
-
-## Paso 6 — Lottie
-
-Lottie reproduce animaciones vectoriales complejas exportadas
-desde After Effects como JSON. Son escalables y ligeras:
-
-Descarga un archivo `.json` de prueba:
-```bash
-# Descargar un archivo Lottie de ejemplo (requiere curl)
-curl -o assets/lottie/loading.json \
-  "https://assets10.lottiefiles.com/packages/lf20_p8bfn5to.json"
-```
-
-O descarga manualmente desde https://lottiefiles.com y guárdalo
-como `assets/lottie/loading.json`.
-
-**Crea `lib/features/paso5_lottie.dart`:**
-
-```dart
+// lib/main.dart
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 
-class PasoLottie extends StatefulWidget {
-  const PasoLottie({super.key});
+void main() => runApp(const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: PasosCinco(),
+    ));
 
+// -----------------------------------------------------------------------
+// APP PRINCIPAL CON NavigationBar
+// -----------------------------------------------------------------------
+class PasosCinco extends StatefulWidget {
+  const PasosCinco({super.key});
   @override
-  State<PasoLottie> createState() => _PasoLottieState();
+  State<PasosCinco> createState() => _PasosCincoState();
 }
 
-class _PasoLottieState extends State<PasoLottie>
+class _PasosCincoState extends State<PasosCinco> {
+  int _paginaActual = 0;
+
+  static const List<Widget> _paginas = [
+    TabImplicitas(),
+    TabSwitcher(),
+    TabExplicita(),
+    TabHero(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _paginas[_paginaActual],
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _paginaActual,
+        onDestinationSelected: (i) => setState(() => _paginaActual = i),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.auto_awesome), label: 'Implicitas'),
+          NavigationDestination(icon: Icon(Icons.swap_horiz), label: 'Switcher'),
+          NavigationDestination(icon: Icon(Icons.settings), label: 'Explicita'),
+          NavigationDestination(icon: Icon(Icons.grid_view), label: 'Hero'),
+        ],
+      ),
+    );
+  }
+}
+
+// -----------------------------------------------------------------------
+// TAB 0 — Animaciones implicitas
+// -----------------------------------------------------------------------
+class TabImplicitas extends StatefulWidget {
+  const TabImplicitas({super.key});
+  @override
+  State<TabImplicitas> createState() => _TabImplicitasState();
+}
+
+class _TabImplicitasState extends State<TabImplicitas> {
+  bool _grande = false;
+  bool _visible = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Implicitas')),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeInOut,
+              width: _grande ? 200 : 80,
+              height: _grande ? 200 : 80,
+              decoration: BoxDecoration(
+                color: _grande ? Colors.deepPurple : Colors.amber,
+                borderRadius: BorderRadius.circular(_grande ? 40 : 8),
+              ),
+              child: const Icon(Icons.star, color: Colors.white, size: 32),
+            ),
+            const SizedBox(height: 24),
+            AnimatedOpacity(
+              duration: const Duration(milliseconds: 400),
+              opacity: _visible ? 1.0 : 0.0,
+              child: const Chip(label: Text('Soy visible')),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton(
+                  onPressed: () => setState(() => _grande = !_grande),
+                  child: const Text('Toggle tamaño'),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () => setState(() => _visible = !_visible),
+                  child: const Text('Toggle opacidad'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// -----------------------------------------------------------------------
+// TAB 1 — AnimatedSwitcher contador
+// -----------------------------------------------------------------------
+class TabSwitcher extends StatefulWidget {
+  const TabSwitcher({super.key});
+  @override
+  State<TabSwitcher> createState() => _TabSwitcherState();
+}
+
+class _TabSwitcherState extends State<TabSwitcher> {
+  int _n = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('AnimatedSwitcher')),
+      body: GestureDetector(
+        onTap: () => setState(() => _n++),
+        behavior: HitTestBehavior.opaque,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                transitionBuilder: (child, anim) =>
+                    ScaleTransition(scale: anim, child: child),
+                child: Text(
+                  '$_n',
+                  key: ValueKey<int>(_n),
+                  style: const TextStyle(fontSize: 80, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text('Toca en cualquier lugar', style: TextStyle(color: Colors.grey)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// -----------------------------------------------------------------------
+// TAB 2 — Animacion explicita con engranaje
+// -----------------------------------------------------------------------
+class TabExplicita extends StatefulWidget {
+  const TabExplicita({super.key});
+  @override
+  State<TabExplicita> createState() => _TabExplicitaState();
+}
+
+class _TabExplicitaState extends State<TabExplicita>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-  double _velocidad = 1.0;
+  late AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Explicita — Engranaje')),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AnimatedBuilder(
+              animation: _ctrl,
+              builder: (_, __) => Transform.rotate(
+                angle: _ctrl.value * 2 * pi,
+                child: Icon(Icons.settings, size: 120, color: Colors.indigo.shade400),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                ElevatedButton(
+                  onPressed: () => _ctrl.forward(from: 0),
+                  child: const Text('Play'),
+                ),
+                ElevatedButton(
+                  onPressed: () => _ctrl.repeat(reverse: true),
+                  child: const Text('Ping-Pong'),
+                ),
+                ElevatedButton(
+                  onPressed: () => _ctrl.stop(),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  child: const Text('Stop', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// -----------------------------------------------------------------------
+// TAB 3 — Hero grid + FAB con Lottie
+// -----------------------------------------------------------------------
+const List<Color> _colores = [
+  Colors.red, Colors.green, Colors.blue,
+  Colors.orange, Colors.purple, Colors.teal,
+];
+
+class TabHero extends StatelessWidget {
+  const TabHero({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Hero Grid')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: GridView.builder(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+          ),
+          itemCount: _colores.length,
+          itemBuilder: (context, i) => GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => DetalleHero(indice: i, color: _colores[i]),
+              ),
+            ),
+            child: Hero(
+              tag: 'color_$i',
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _colores[i],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => Navigator.push(
+          context,
+          PageRouteBuilder(
+            transitionDuration: const Duration(milliseconds: 600),
+            pageBuilder: (_, __, ___) => const PantallaLottie(),
+            transitionsBuilder: (_, anim, __, child) =>
+                FadeTransition(opacity: anim, child: child),
+          ),
+        ),
+        icon: const Icon(Icons.celebration),
+        label: const Text('Lottie'),
+      ),
+    );
+  }
+}
+
+class DetalleHero extends StatelessWidget {
+  final int indice;
+  final Color color;
+  const DetalleHero({super.key, required this.indice, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        title: Text('Color $indice'),
+      ),
+      body: Column(
+        children: [
+          Hero(
+            tag: 'color_$indice',
+            child: Container(width: double.infinity, height: 280, color: color),
+          ),
+          const SizedBox(height: 24),
+          Text('Tarjeta $indice',
+              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          const Text('Pulsa Atras para ver la animacion Hero inversa',
+              style: TextStyle(color: Colors.grey)),
+        ],
+      ),
+    );
+  }
+}
+
+// -----------------------------------------------------------------------
+// PANTALLA LOTTIE — accesible desde el FAB del Tab 3
+// -----------------------------------------------------------------------
+class PantallaLottie extends StatefulWidget {
+  const PantallaLottie({super.key});
+  @override
+  State<PantallaLottie> createState() => _PantallaLottieState();
+}
+
+class _PantallaLottieState extends State<PantallaLottie>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
 
   @override
   void initState() {
@@ -971,89 +1228,36 @@ class _PasoLottieState extends State<PasoLottie>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Lottie')),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
+      body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-
-            // Lottie desde asset local
-            Lottie.asset(
-              'assets/lottie/loading.json',
-              controller:  _ctrl,
-              width:       200,
-              height:      200,
-              // onLoaded se llama cuando el archivo está listo
-              onLoaded:    (composition) {
-                _ctrl
-                  ..duration = composition.duration
-                  ..repeat();           // reproducir en loop
-              },
-            ),
-
-            const SizedBox(height: 24),
-
-            // Lottie desde URL — sin controller, reproduce solo
-            const Text('Desde URL (sin controller):',
-                style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
+            // Lottie.network no requiere assets en pubspec
             Lottie.network(
-              'https://assets10.lottiefiles.com/packages/lf20_jR229r.json',
-              width:    120,
-              height:   120,
-              repeat:   true,
-              errorBuilder: (_, e, __) => const Icon(
-                  Icons.broken_image, size: 60),
+              'https://assets5.lottiefiles.com/packages/lf20_usmfx6bp.json',
+              width: 200,
+              height: 200,
+              fit: BoxFit.contain,
+              repeat: true,
+              errorBuilder: (_, __, ___) => const Column(
+                children: [
+                  Icon(Icons.celebration, size: 80, color: Colors.amber),
+                  Text('(Lottie requiere internet)'),
+                ],
+              ),
             ),
-
+            const SizedBox(height: 16),
+            const Text('Lottie desde URL', style: TextStyle(fontSize: 18)),
+            const SizedBox(height: 8),
+            const Text(
+              'Para Lottie.asset: coloca el .json\nen assets/lottie/ y declara en pubspec',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey, fontSize: 13),
+            ),
             const SizedBox(height: 24),
-
-            // Control de velocidad
-            Row(
-              children: [
-                Text('Velocidad: ${_velocidad.toStringAsFixed(1)}x',
-                    style: const TextStyle(fontSize: 14)),
-                Expanded(
-                  child: Slider(
-                    value:     _velocidad,
-                    min:       0.25,
-                    max:       3.0,
-                    divisions: 11,
-                    onChanged: (v) {
-                      setState(() => _velocidad = v);
-                      _ctrl.animateTo(
-                        _ctrl.value,
-                        duration: Duration(
-                          milliseconds:
-                              (_ctrl.duration!.inMilliseconds / v).toInt(),
-                        ),
-                      );
-                      _ctrl.repeat();
-                    },
-                  ),
-                ),
-              ],
-            ),
-
-            // Controles
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                FilledButton(
-                  onPressed: () => _ctrl.repeat(),
-                  child: const Text('Loop'),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton(
-                  onPressed: () => _ctrl.stop(),
-                  child: const Text('Detener'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.tonal(
-                  onPressed: () => _ctrl.forward(from: 0),
-                  child: const Text('Una vez'),
-                ),
-              ],
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Volver'),
             ),
           ],
         ),
@@ -1063,275 +1267,193 @@ class _PasoLottieState extends State<PasoLottie>
 }
 ```
 
-Añade al menú:
+> **Prueba esto:** Navega entre las 4 pestanas. En Tab 3 (Hero), toca una tarjeta — la caja
+> de color debe expandirse con animacion Hero. Pulsa el FAB "Lottie" — debe navegar con
+> `FadeTransition` a la pantalla de la animacion JSON.
 
-```dart
-// lib/main.dart — añadir a PantallaMenu
-
-import 'features/paso5_lottie.dart';
-
-_ItemMenu(
-  titulo:   '5 — Lottie',
-  subtitulo: 'Animaciones vectoriales desde JSON',
-  onTap: () => Navigator.push(context,
-      MaterialPageRoute(builder: (_) => const PasoLottie())),
-),
-```
-
-```bash
-flutter run
-# → Abre la pantalla de Lottie
-# → La animación desde asset reproduce en loop
-# → La animación desde URL carga y reproduce (requiere internet)
-# → El slider cambia la velocidad de reproducción
-# → Botones Loop / Detener / Una vez controlan el playback
-```
+Salida esperada: la app muestra 4 pestanas funcionales. El contador en Tab 1 anima con escala
+en cada toque. El engranaje en Tab 2 rota con control fino. Las tarjetas en Tab 3 vuelan con
+Hero. El FAB navega con fade a la pantalla Lottie.
 
 ---
 
-## `lib/main.dart` final completo
+## main.dart completo — referencia
+
+El archivo del Paso 5 es el `main.dart` de referencia final. Incluye las 4 pestanas y la
+pantalla Lottie en un solo archivo para facilitar la experimentacion en clase. Para el proyecto
+final, cada pantalla se separa en su propio archivo dentro de `lib/screens/`.
+
+Puntos clave del codigo completo:
+
+- `NavigationBar` con `selectedIndex` controlado por estado del widget padre
+- Cada tab es un `StatefulWidget` independiente con su propio ciclo de vida
+- `SingleTickerProviderStateMixin` en cada State que usa un `AnimationController`
+- `PageRouteBuilder` con `FadeTransition` para la navegacion al Lottie
+- `errorBuilder` en `Lottie.network` para manejar falta de conexion
+
+---
+
+## Proyecto final
+
+### Estructura
+
+```
+modulo18_animaciones/
+├── assets/
+│   └── lottie/
+│       ├── loading.json      <- descargar de lottiefiles.com
+│       └── success.json      <- descargar de lottiefiles.com
+├── lib/
+│   ├── main.dart             <- punto de entrada, NavigationBar con 4 tabs
+│   └── screens/
+│       ├── pantalla_implicitas.dart   <- AnimatedContainer, AnimatedOpacity, AnimatedSwitcher
+│       ├── pantalla_explicita.dart    <- AnimationController, Tween, AnimatedBuilder
+│       ├── pantalla_hero.dart         <- Hero grid + PantallaDetalle
+│       └── pantalla_lottie.dart       <- Lottie + PageRouteBuilder
+└── pubspec.yaml
+```
+
+### Archivos clave
+
+**`lib/main.dart`** — configura `MaterialApp` y el `NavigationBar` principal con los 4 tabs.
+Importa cada pantalla de `screens/` y las ensambla en la lista de paginas.
+
+**`lib/screens/pantalla_implicitas.dart`** — `StatefulWidget` con `_expandido` y `_visible`.
+Contiene `AnimatedContainer`, `AnimatedOpacity`, `AnimatedPadding` y `AnimatedSwitcher` con
+`ScaleTransition` para el contador.
+
+**`lib/screens/pantalla_explicita.dart`** — `StatefulWidget` con `SingleTickerProviderStateMixin`.
+Contiene `AnimationController`, `Tween<double>` para rotacion, `ColorTween` para color,
+`AnimatedBuilder` para reconstruccion eficiente, y botones Play/Reverse/PingPong/Stop.
+
+**`lib/screens/pantalla_hero.dart`** — `StatelessWidget` con `GridView` de 6 tarjetas de color.
+Cada tarjeta tiene `Hero(tag: 'color_$i')`. La clase `PantallaDetalle` recibe el color e indice
+y muestra el Hero expandido.
+
+**`lib/screens/pantalla_lottie.dart`** — `StatefulWidget` con `SingleTickerProviderStateMixin`
+para el `AnimationController` de `LottieBuilder.asset`. Muestra la animacion JSON controlada
+por botones. Incluye `PageRouteBuilder` con `FadeTransition` como ejemplo de navegacion.
+
+---
+
+## Guía rápida de imports
 
 ```dart
+// Animaciones implicitas — incluidas en Flutter SDK, no requiere import adicional
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'features/paso1_implicity.dart';
-import 'features/paso2_explicit.dart';
-import 'features/paso3_hero.dart';
-import 'features/paso5_lottie.dart';
+// AnimatedContainer, AnimatedOpacity, AnimatedPadding, AnimatedAlign,
+// AnimatedSwitcher, AnimatedCrossFade, AnimatedPositioned, AnimatedDefaultTextStyle
 
-void main() {
-  runApp(const ProviderScope(child: AnimacionesApp()));
-}
+// Animaciones explicitas — incluidas en Flutter SDK
+import 'package:flutter/material.dart';
+// AnimationController, Tween, ColorTween, CurvedAnimation, AnimatedBuilder,
+// SlideTransition, FadeTransition, ScaleTransition, Transform.rotate
 
-class AnimacionesApp extends StatelessWidget {
-  const AnimacionesApp({super.key});
+// Hero y PageRouteBuilder — incluidas en Flutter SDK
+import 'package:flutter/material.dart';
+// Hero, Navigator, MaterialPageRoute, PageRouteBuilder
 
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Animaciones',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
-        useMaterial3: true,
-      ),
-      home: const PantallaMenu(),
-    );
-  }
-}
+// Lottie — paquete externo, requiere pubspec.yaml
+import 'package:lottie/lottie.dart';
+// Lottie.asset, Lottie.network, LottieBuilder.asset
 
-class PantallaMenu extends StatelessWidget {
-  const PantallaMenu({super.key});
-
-  void _navegar(BuildContext context, Widget pantalla,
-      {String tipo = 'fade'}) {
-    Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => pantalla,
-        transitionDuration: const Duration(milliseconds: 500),
-        transitionsBuilder: (_, animation, __, child) {
-          return switch (tipo) {
-            'slide' => SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(1, 0),
-                  end:   Offset.zero,
-                ).animate(CurvedAnimation(
-                    parent: animation, curve: Curves.easeOut)),
-                child: child,
-              ),
-            'scale' => ScaleTransition(
-                scale: CurvedAnimation(
-                    parent: animation, curve: Curves.elasticOut),
-                child: child,
-              ),
-            _ => FadeTransition(opacity: animation, child: child),
-          };
-        },
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Animaciones Flutter'),
-        backgroundColor:
-            Theme.of(context).colorScheme.primaryContainer,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _ItemMenu(
-            titulo:   '1 — Implícitas',
-            subtitulo: 'AnimatedContainer, AnimatedOpacity...',
-            onTap: () => Navigator.push(context,
-                MaterialPageRoute(
-                    builder: (_) =>
-                        const PasoAnimacionesImplicitas())),
-          ),
-          _ItemMenu(
-            titulo:   '2 — Explícitas',
-            subtitulo: 'AnimationController + Tween',
-            onTap: () => Navigator.push(context,
-                MaterialPageRoute(
-                    builder: (_) =>
-                        const PasoAnimacionesExplicitas())),
-          ),
-          _ItemMenu(
-            titulo:   '3 — Hero transitions',
-            subtitulo: 'Elemento compartido entre pantallas',
-            onTap: () => Navigator.push(context,
-                MaterialPageRoute(
-                    builder: (_) => const PasoHeroLista())),
-          ),
-          _ItemMenu(
-            titulo:   '4a — Slide',
-            subtitulo: 'PageRouteBuilder — deslizar',
-            onTap: () => _navegar(context,
-                const _PantallaDemo(
-                    titulo: 'Slide', color: Colors.indigo),
-                tipo: 'slide'),
-          ),
-          _ItemMenu(
-            titulo:   '4b — Scale',
-            subtitulo: 'PageRouteBuilder — escalar',
-            onTap: () => _navegar(context,
-                const _PantallaDemo(
-                    titulo: 'Scale', color: Colors.deepOrange),
-                tipo: 'scale'),
-          ),
-          _ItemMenu(
-            titulo:   '4c — Fade',
-            subtitulo: 'PageRouteBuilder — fundido',
-            onTap: () => _navegar(context,
-                const _PantallaDemo(
-                    titulo: 'Fade', color: Colors.teal),
-                tipo: 'fade'),
-          ),
-          _ItemMenu(
-            titulo:   '5 — Lottie',
-            subtitulo: 'Animaciones vectoriales JSON',
-            onTap: () => Navigator.push(context,
-                MaterialPageRoute(
-                    builder: (_) => const PasoLottie())),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ItemMenu extends StatelessWidget {
-  final String       titulo;
-  final String       subtitulo;
-  final VoidCallback onTap;
-
-  const _ItemMenu({
-    required this.titulo,
-    required this.subtitulo,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) => Card(
-    margin: const EdgeInsets.only(bottom: 8),
-    child: ListTile(
-      title:    Text(titulo,
-          style: const TextStyle(fontWeight: FontWeight.bold)),
-      subtitle: Text(subtitulo),
-      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-      onTap:    onTap,
-    ),
-  );
-}
-
-class _PantallaDemo extends StatelessWidget {
-  final String titulo;
-  final Color  color;
-  const _PantallaDemo({required this.titulo, required this.color});
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: color,
-    body: Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(titulo,
-              style: const TextStyle(
-                  color: Colors.white, fontSize: 40,
-                  fontWeight: FontWeight.bold)),
-          const SizedBox(height: 24),
-          FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: color),
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Volver'),
-          ),
-        ],
-      ),
-    ),
-  );
-}
+// Para calculos de pi en Tween de rotacion
+import 'dart:math';
+// pi (= 3.14159265...)
 ```
 
 ---
 
-## Estado final del proyecto
+## Cuándo usar qué
 
 ```
-lib/
-├── main.dart                         ← menú con todos los pasos
-└── features/
-    ├── paso1_implicity.dart          ← paso 2
-    ├── paso2_explicit.dart           ← paso 3
-    ├── paso3_hero.dart               ← paso 4
-    └── paso5_lottie.dart             ← paso 6
-    (paso4 vive en main.dart)
+Situacion                                      | Solucion recomendada
+-----------------------------------------------|-----------------------------------------------
+Propiedad simple que cambia (color, tamaño)    | AnimatedContainer / AnimatedOpacity
+Animacion de padding o alineacion              | AnimatedPadding / AnimatedAlign
+Transicion entre dos widgets distintos         | AnimatedSwitcher (con ValueKey obligatoria)
+Crossfade entre dos estados de un widget       | AnimatedCrossFade (crossFadeState)
+Control preciso (play, pause, reversa)         | AnimationController + Tween + AnimatedBuilder
+Elemento compartido entre dos pantallas        | Hero (mismo tag en origen y destino)
+Transicion de pagina personalizada             | PageRouteBuilder (Slide/Fade/Scale)
+Animaciones complejas prediseñadas             | Lottie.asset / Lottie.network
+Dos o mas AnimationControllers en el mismo     | TickerProviderStateMixin (no Single...)
+  widget                                       |
+Animacion en loop automatico                   | _ctrl.repeat() o Lottie(repeat: true)
+Animacion que sigue el gesto del usuario       | _ctrl.value = gesto.delta (0.0 a 1.0)
+Lottie desde internet sin assets locales       | Lottie.network('https://...') sin pubspec
+Reproducir Lottie una sola vez al abrir       | LottieBuilder.asset + ctrl.forward()
 ```
 
 ---
 
 ## Ejercicios propuestos
 
-1. **Indicador de carga animado** — Crea un widget `LoadingDots` con
-   tres puntos que aparecen y desaparecen en secuencia usando
-   `AnimationController` con `Interval` para escalonar cada punto.
-   Úsalo como placeholder mientras carga la lista de servidores de
-   la app del catálogo (página 12).
+**Ejercicio 1 — Tarjeta expandible con `AnimatedCrossFade`**
 
-2. **Card con flip 3D** — Usa `AnimatedBuilder` con `Transform` y
-   `Matrix4.rotationY(angulo)` para crear una tarjeta que gira 180°
-   al tocarla, mostrando información diferente en cada cara.
-   Recuerda invertir la escala en la segunda cara para que no se vea espejada.
+Crea un `Card` con un titulo siempre visible y un cuerpo de texto oculto. Al pulsar la tarjeta,
+usa `AnimatedCrossFade` para alternar entre un `SizedBox.shrink()` y el cuerpo con texto
+completo. Usa `CrossFadeState.showFirst` para ocultar y `CrossFadeState.showSecond` para
+mostrar. El cuerpo debe tener al menos 3 lineas de texto de descripcion.
 
-3. **Staggered list** — Al entrar en `PasoAnimacionesImplicitas`, los
-   elementos de la lista deben aparecer uno por uno con un retardo
-   progresivo (0ms, 100ms, 200ms...). Usa `FutureBuilder` o
-   `Future.delayed` con `AnimatedOpacity` en cada elemento.
+```dart
+AnimatedCrossFade(
+  duration: const Duration(milliseconds: 300),
+  crossFadeState: _expandido ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+  firstChild: const SizedBox.shrink(),
+  secondChild: const Text('Contenido del cuerpo...'),
+)
+```
 
-4. **Hero con FlightShuttleBuilder** — Personaliza la animación Hero
-   de la pantalla de servidores. Usando `flightShuttleBuilder`, muestra
-   un widget de transición diferente durante el vuelo (ej: un círculo
-   que se expande). El widget de origen y destino permanecen iguales.
+**Ejercicio 2 — Indicador de carga circular**
+
+Crea un widget que use `AnimationController` con `repeat()` para rotar un icono `Icons.refresh`
+continuamente. Agrega un `Tween<double>(begin: 0, end: 2 * pi)` para la rotacion completa.
+Coloca el icono rotante dentro de un `CircleAvatar` de 64px con fondo azul.
+Añade un boton "Detener" que llame `_ctrl.stop()` y un boton "Reanudar" que llame `_ctrl.repeat()`.
+
+**Ejercicio 3 — Galeria Hero con imagenes de internet**
+
+Muestra una grilla de 9 imagenes usando `Image.network` con URLs de `https://picsum.photos/200`.
+Cada imagen debe tener un `Hero` con tag unico `'foto_$i'`. Al tocar una imagen se abre una
+pantalla de detalle a pantalla completa con la imagen en `Image.network` del mismo URL pero
+con dimensiones grandes. Agrega `GestureDetector(onTap: () => Navigator.pop(context))` en la
+pantalla de detalle para volver con animacion Hero inversa.
+
+**Ejercicio 4 — Lottie controlado con formulario**
+
+Descarga un Lottie de LottieFiles (por ejemplo un checkmark de exito).
+Crea una pantalla con un `TextFormField` y un boton "Enviar". Al pulsar "Enviar", valida que
+el campo no este vacio. Si la validacion pasa, navega con `PageRouteBuilder` y `FadeTransition`
+a una pantalla de exito que muestra el Lottie con `LottieBuilder.asset` y un `AnimationController`
+que llama `_ctrl.forward()` en `onLoaded`. Configura `repeat: false` para que se reproduzca
+solo una vez.
 
 ---
 
-## Resumen de la página 18
+## Resumen
 
-- Las **animaciones implícitas** (`AnimatedContainer`, `AnimatedOpacity`, etc.) son la primera opción — solo cambia el valor y Flutter interpola automáticamente. No necesitan `AnimationController`.
-- `AnimationController` necesita un `TickerProvider` — se obtiene con el mixin `SingleTickerProviderStateMixin`. Siempre llamar `_ctrl.dispose()` en `dispose()`.
-- `Tween<T>.animate(controller)` crea la animación tipada. `CurvedAnimation` aplica una curva de interpolación. `Interval(inicio, fin)` segmenta cuándo ocurre cada animación dentro del total.
-- `AnimatedBuilder(animation, builder)` reconstruye solo el subtree afectado en cada frame. El parámetro `child` evita reconstruir widgets estáticos dentro del builder.
-- `Hero` requiere el mismo `tag` en origen y destino. El tag debe ser único en toda la pantalla. No anida Heroes.
-- `PageRouteBuilder` con `transitionsBuilder` personaliza la animación de navegación. `SlideTransition`, `FadeTransition` y `ScaleTransition` son los más usados.
-- `Lottie.asset` carga desde `pubspec.yaml` assets. `Lottie.network` carga desde URL. `onLoaded` proporciona la duración real de la animación para configurar el controller.
-- `Curves.bounceOut`, `Curves.elasticOut` y `Curves.easeInOut` son las curvas más expresivas. `Curves.linear` es la opción por defecto y la menos atractiva visualmente.
+- Las **animaciones implicitas** (`AnimatedContainer`, `AnimatedOpacity`, `AnimatedPadding`)
+  son la forma mas rapida de animar: solo cambia el estado y Flutter interpola automaticamente.
+  Siempre requieren el parametro `duration`.
+- **`AnimatedSwitcher`** permite transiciones entre widgets distintos. El `ValueKey` es
+  obligatorio en los hijos para que Flutter detecte el cambio; sin el, la animacion no dispara.
+- **`AnimationController` + `Tween` + `AnimatedBuilder`** dan control total sobre la animacion:
+  inicio, pausa, reversa, ping-pong y seguimiento de gestos. Siempre usar con
+  `SingleTickerProviderStateMixin` y llamar `dispose()`.
+- **`Hero`** crea transiciones de elemento compartido entre pantallas con cero codigo adicional:
+  solo el mismo `tag` en origen y destino. El tag debe ser unico en cada pantalla.
+- **`PageRouteBuilder`** permite personalizar la transicion de pagina con `SlideTransition`,
+  `FadeTransition`, `ScaleTransition` o combinaciones. Usar `reverseTransitionDuration` para
+  controlar la duracion al volver.
+- **Lottie** reproduce animaciones JSON de LottieFiles. `Lottie.network` no requiere pubspec;
+  `Lottie.asset` requiere declarar la carpeta en `flutter.assets`. `LottieBuilder.asset` con
+  `AnimationController` da control manual de reproduccion.
+- Para **multiples `AnimationController`** en el mismo widget usar `TickerProviderStateMixin`
+  en lugar de `Single...`. Para animaciones en loop: `_ctrl.repeat()` o `Lottie(repeat: true)`.
+- El patron de **5 pasos con `const int paso = 1`** permite explorar cada concepto de forma
+  aislada antes de ensamblar el proyecto final con `NavigationBar`.
 
 ---
 
-> **Siguiente página →** Página 19: Clean Architecture con Riverpod —
-> capas domain/data/ui, repositorios, use cases y proyecto integrador.
+> **Siguiente pagina →** Pagina 19: Temas, tipografia y diseno adaptativo.

@@ -320,6 +320,47 @@ export default function ThemeToggle() {
 }
 ```
 
+### `src/App.tsx`
+
+```tsx
+// src/App.tsx
+
+import { useAuth }  from './contexts/AuthContext'
+import ThemeToggle  from './components/ThemeToggle'
+
+// ┌──────────────────────────────────────────────────────────────────────┐
+// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
+// │  1  ThemeToggle   — botón que alterna el tema desde el contexto     │
+// │  2  UserBadge     — badge de usuario autenticado con logout         │
+// │  3  LoginForm     — formulario de login conectado a AuthContext      │
+// │  4  AppHeader     — header con dos contextos simultáneos            │
+// └──────────────────────────────────────────────────────────────────────┘
+const PASO = 1
+
+export default function App() {
+  const { state } = useAuth()
+
+  const content =
+    PASO === 1 ? <ThemeToggle /> :
+    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
+
+  return (
+    <main style={{ maxWidth: 600, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
+      {PASO === 4 ? content : (
+        <>
+          {state.user && (
+            <p style={{ marginBottom: 16, fontSize: 14, color: '#6b7280' }}>
+              Sesión activa: <strong>{state.user.name}</strong>
+            </p>
+          )}
+          {content}
+        </>
+      )}
+    </main>
+  )
+}
+```
+
 ### Prueba esto
 
 - Pulsa el botón — el fondo y el texto del botón cambian de claro a oscuro; nota que el componente no tiene estado propio, solo lee el contexto con `useTheme()`
@@ -388,6 +429,18 @@ export default function UserBadge() {
   )
 }
 ```
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import UserBadge from './components/UserBadge'
+```
+
+```tsx
+PASO === 2 ? <UserBadge /> :
+```
+
+Cambia `PASO = 2` y guarda.
 
 ### Prueba esto
 
@@ -475,6 +528,18 @@ const inputStyle = {
 }
 ```
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import LoginForm from './components/LoginForm'
+```
+
+```tsx
+PASO === 3 ? <LoginForm /> :
+```
+
+Cambia `PASO = 3` y guarda.
+
 ### Prueba esto
 
 - Deja el campo email vacío e intenta pulsar el botón — está deshabilitado porque `!email || !password`; el botón solo se activa cuando ambos tienen contenido
@@ -530,6 +595,18 @@ export default function AppHeader() {
 }
 ```
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import AppHeader from './components/AppHeader'
+```
+
+```tsx
+PASO === 4 ? <AppHeader /> :
+```
+
+Cambia `PASO = 4` y guarda. Desde aquí puedes volver a cualquier paso anterior cambiando la constante.
+
 ### Prueba esto
 
 - Pulsa el toggle de tema — el fondo del header cambia de blanco a `#111827`; observa que `AppHeader` consume dos contextos independientes y ambos afectan la vista
@@ -570,55 +647,6 @@ createRoot(document.getElementById('root')!).render(
 > El orden de los Providers importa cuando un Provider necesita
 > datos de otro contexto. En este caso son independientes, así que
 > el orden no afecta el resultado.
-
----
-
-### `src/App.tsx`
-
-```tsx
-// src/App.tsx
-
-import { useAuth }  from './contexts/AuthContext'
-import AppHeader    from './components/AppHeader'
-import LoginForm    from './components/LoginForm'
-import ThemeToggle  from './components/ThemeToggle'
-import UserBadge    from './components/UserBadge'
-
-// ┌──────────────────────────────────────────────────────────────────────┐
-// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
-// │  1  ThemeToggle   — botón que alterna el tema desde el contexto     │
-// │  2  UserBadge     — badge de usuario autenticado con logout         │
-// │  3  LoginForm     — formulario de login conectado a AuthContext      │
-// │  4  AppHeader     — header con dos contextos simultáneos            │
-// └──────────────────────────────────────────────────────────────────────┘
-const PASO = 1
-
-export default function App() {
-  const { state } = useAuth()
-
-  const content =
-    PASO === 1 ? <ThemeToggle /> :
-    PASO === 2 ? <UserBadge /> :
-    PASO === 3 ? <LoginForm /> :
-    PASO === 4 ? <AppHeader /> :
-    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
-
-  return (
-    <main style={{ maxWidth: 600, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
-      {PASO === 4 ? content : (
-        <>
-          {state.user && (
-            <p style={{ marginBottom: 16, fontSize: 14, color: '#6b7280' }}>
-              Sesión activa: <strong>{state.user.name}</strong>
-            </p>
-          )}
-          {content}
-        </>
-      )}
-    </main>
-  )
-}
-```
 
 ---
 

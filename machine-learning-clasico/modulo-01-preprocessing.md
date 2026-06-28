@@ -561,6 +561,8 @@ x_scaled = (x - μ) / σ
 ```
 
 ```python
+
+
 from sklearn.preprocessing import StandardScaler
 
 # ⚠️ fit() SOLO en train, transform() en train Y test

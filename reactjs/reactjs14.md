@@ -69,7 +69,7 @@ La solución: `useCallback` para estabilizar la referencia.
 
 ---
 
-## `src/components/UserCard.tsx`
+## PASO 1 — `src/components/UserCard.tsx`
 
 ```tsx
 // src/components/UserCard.tsx
@@ -130,6 +130,58 @@ export default UserCard
 - Envuelve `onEdit` con `useCallback(() => console.log('edit'), [])` en el padre y confirma que el log de render de `UserCard` ya no aparece al hacer clic en el botón del padre
 - Cambia el `role` de `"admin"` a `"viewer"` en las props — observa que `UserCard` sí se re-renderiza porque la prop `role` realmente cambió, que es el comportamiento correcto de `memo`
 - Abre React DevTools, activa "Highlight updates when components render" y haz clic en el botón del padre — con `memo` + `useCallback`, `UserCard` no se resalta; sin ellos, sí
+
+### `src/App.tsx`
+
+```tsx
+// src/App.tsx
+
+import { useState, useCallback } from 'react'
+import UserCard      from './components/UserCard'
+import RenderCounter from './components/RenderCounter'
+// ┌──────────────────────────────────────────────────────────────────────┐
+// │  1  UserCard       — memo + useCallback, re-renders del padre       │
+// │  2  ProductTable   — memo + useCallback + useMemo en tabla          │
+// │  3  ExpensiveChart — memo con comparador personalizado              │
+// └──────────────────────────────────────────────────────────────────────┘
+const PASO = 1
+
+export default function App() {
+  const [count, setCount] = useState(0)
+  const handleEditUser = useCallback(() => console.log('Editando usuario'), [])
+
+  const content = PASO === 1 ? (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+        <h2 style={{ fontSize: 15, margin: 0 }}>React.memo — UserCard</h2>
+        <RenderCounter label="App" />
+      </div>
+      <button
+        onClick={() => setCount((c) => c + 1)}
+        style={{
+          padding: '8px 16px', background: '#6366f1', color: '#fff',
+          border: 'none', borderRadius: 6, cursor: 'pointer', marginBottom: 12,
+        }}
+      >
+        Re-renderizar App ({count} veces)
+      </button>
+      <UserCard
+        name="Ana García"
+        email="ana@ejemplo.com"
+        role="admin"
+        onEdit={handleEditUser}
+      />
+    </div>
+  ) :
+    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
+
+  return (
+    <main style={{ maxWidth: 580, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
+      {content}
+    </main>
+  )
+}
+```
 
 ---
 
@@ -307,6 +359,18 @@ function actionBtn(bg: string, color: string): React.CSSProperties {
 - Elimina `<ProductRow key={product.id} ...>` y pon `key={product.name}` — renombra mentalmente un producto añadiendo un carácter al `name` y observa que React desmonta y vuelve a montar la fila en lugar de actualizarla
 - Haz clic en "Eliminar" en un producto — observa que el `totalValue` se recalcula automáticamente porque `filtered` es una dependencia de ese `useMemo`
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import ProductTable from './components/ProductTable'
+```
+
+```tsx
+PASO === 2 ? <ProductTable /> :
+```
+
+Cambia `PASO = 2` y guarda.
+
 ---
 
 ## `React.memo` con comparador personalizado
@@ -387,6 +451,29 @@ export default ExpensiveChart
 - Modifica el comparador para que siempre devuelva `true` — cambia un valor en el `data` y observa que el gráfico no se actualiza aunque los datos hayan cambiado; este es el bug que produce un comparador incorrecto
 - Cambia `prevProps.data.length === nextProps.data.length` en el comparador por una comparación falsa como `prevProps.data.length !== nextProps.data.length` — observa que ahora el componente siempre re-renderiza aunque los datos sean iguales
 - Añade `console.log('render ExpensiveChart')` dentro del componente y provoca re-renders del padre — con el comparador correcto, el log no debe aparecer si los datos y el label son iguales
+- Desde aquí puedes volver a cualquier PASO anterior cambiando el número y guardando.
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import ExpensiveChart from './components/ExpensiveChart'
+```
+
+```tsx
+const CHART_DATA = [42, 78, 35, 91, 63, 57, 84]  // añade después de las importaciones
+```
+
+```tsx
+PASO === 3 ? (
+  <ExpensiveChart
+    data={CHART_DATA}
+    label="Ventas semanales"
+    color="#0070f3"
+  />
+) :
+```
+
+Cambia `PASO = 3` y guarda.
 
 ---
 
@@ -511,117 +598,6 @@ export default function App() {
 - Simula una conexión lenta con el throttling de DevTools (3G lento) y navega a una ruta perezosa — observa el `<p>Cargando...</p>` del `PageLoader` durante la descarga del chunk
 - Elimina `<Suspense>` manteniendo `lazy` y navega a una ruta perezosa — observa el error en consola: React exige un `Suspense` ancestro para cualquier componente `lazy`
 - Cambia `lazy(() => import('./pages/HomePage'))` a `import('./pages/HomePage')` (sin `lazy`) y navega — el componente se carga de inmediato pero el import dinámico sin `lazy` no integra con `Suspense` y React lo trata como una promesa normal
-
----
-
-## `src/App.tsx` — todo junto
-
-```tsx
-// src/App.tsx
-
-import { useState, useCallback } from 'react'
-import UserCard       from './components/UserCard'
-import ProductTable   from './components/ProductTable'
-import ExpensiveChart from './components/ExpensiveChart'
-import RenderCounter  from './components/RenderCounter'
-
-// ┌──────────────────────────────────────────────────────────────────────┐
-// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
-// │  1  UserCard      — memo + useCallback, re-renders del padre        │
-// │  2  ProductTable  — memo + useCallback + useMemo en tabla           │
-// │  3  ExpensiveChart — memo con comparador personalizado              │
-// └──────────────────────────────────────────────────────────────────────┘
-const PASO = 1
-
-const CHART_DATA = [42, 78, 35, 91, 63, 57, 84]
-
-function Step1() {
-  const [count, setCount] = useState(0)
-
-  // useCallback — referencia estable para UserCard memo
-  const handleEditUser = useCallback(() => {
-    console.log('Editando usuario')
-  }, [])
-
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-        <h2 style={{ fontSize: 15, margin: 0 }}>React.memo — UserCard</h2>
-        <RenderCounter label="App" />
-      </div>
-
-      <button
-        onClick={() => setCount((c) => c + 1)}
-        style={{
-          padding: '8px 16px', background: '#6366f1', color: '#fff',
-          border: 'none', borderRadius: 6, cursor: 'pointer', marginBottom: 12,
-        }}
-      >
-        Re-renderizar App ({count} veces)
-      </button>
-
-      <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 12 }}>
-        UserCard tiene memo + onEdit con useCallback — no re-renderiza al hacer clic en el botón.
-      </p>
-
-      <UserCard
-        name="Ana García"
-        email="ana@ejemplo.com"
-        role="admin"
-        onEdit={handleEditUser}
-      />
-    </div>
-  )
-}
-
-function Step2() {
-  return (
-    <div>
-      <h2 style={{ fontSize: 15, marginBottom: 12 }}>
-        memo + useCallback + useMemo — ProductTable
-      </h2>
-      <ProductTable />
-    </div>
-  )
-}
-
-function Step3() {
-  return (
-    <div>
-      <h2 style={{ fontSize: 15, marginBottom: 12 }}>
-        memo con comparador personalizado — ExpensiveChart
-      </h2>
-      <ExpensiveChart
-        data={CHART_DATA}
-        label="Ventas semanales"
-        color="#0070f3"
-      />
-    </div>
-  )
-}
-
-export default function App() {
-  const content =
-    PASO === 1 ? <Step1 /> :
-    PASO === 2 ? <Step2 /> :
-    PASO === 3 ? <Step3 /> :
-    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
-
-  return (
-    <main style={{ maxWidth: 580, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
-      {content}
-    </main>
-  )
-}
-```
-
-### Prueba esto
-
-- Cambia `PASO` a `1` y guarda — observa `UserCard` con el botón de re-renderizar; el contador de App sube pero `UserCard` no se re-renderiza
-- Cambia `PASO` a `2` y guarda — interactúa con el filtro y con los botones de eliminar; observa el total recalculándose con `useMemo`
-- Cambia `PASO` a `3` y guarda — abre la consola y provoca un re-render del padre; el gráfico no se re-renderiza gracias al comparador personalizado
-- Cambia `PASO` a `99` y guarda — observa el mensaje de error en rojo indicando que el paso no existe
-- En `PASO === 1`, quita `useCallback` de `handleEditUser` y añade `<RenderCounter label="UserCard" />` dentro de `UserCard` — observa que el contador sube con cada clic en el botón aunque el usuario nunca interactuó con la tarjeta
 
 ---
 

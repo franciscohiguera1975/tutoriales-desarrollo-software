@@ -112,6 +112,36 @@ export default function CssGlobalDemo() {
 > **Cuándo usarlo**: estilos base, reset CSS, tipografía global, variables de diseño.
 > Para componentes individuales, CSS Modules es más seguro.
 
+### `src/App.tsx`
+
+```tsx
+// src/App.tsx
+
+import CssGlobalDemo from './components/CssGlobalDemo'
+// ┌──────────────────────────────────────────────────────────────────────┐
+// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
+// │  1  CssGlobalDemo        — clases globales y riesgo de colisión     │
+// │  2  InlineStyleDemo      — objetos JS, sin :hover ni @media         │
+// │  3  CssModuleDemo        — scope local, :hover con CSS Modules      │
+// │  4  StyledComponentsDemo — CSS-in-JS con props transient ($)        │
+// │  5  LiveStyleEditor      — hook useStyles para estilos dinámicos    │
+// │  6  HoverDemo            — hook useHover para efectos hover         │
+// │  7  ThemePanel           — Context + CSS variables para theming     │
+// └──────────────────────────────────────────────────────────────────────┘
+const PASO = 1
+
+export default function App() {
+  const content = PASO === 1 ? <CssGlobalDemo /> :
+    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
+
+  return (
+    <main style={{ maxWidth: 640, margin: '0 auto', padding: '32px 16px' }}>
+      {content}
+    </main>
+  )
+}
+```
+
 ---
 
 ## 2 · Inline styles
@@ -164,6 +194,18 @@ export default function InlineStyleDemo() {
 
 > **Limitación**: `style` no soporta `:hover`, `:focus`, `@media` ni animaciones CSS.
 > Para esos casos usa CSS Modules o styled-components.
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import InlineStyleDemo from './components/InlineStyleDemo'
+```
+
+```tsx
+PASO === 2 ? <InlineStyleDemo /> :
+```
+
+Cambia `PASO = 2` y guarda.
 
 ---
 
@@ -237,6 +279,18 @@ export default function CssModuleDemo() {
 
 > `styles` es un objeto TypeScript — si escribes `styles.btnTypo` y la clase
 > no existe, TypeScript lo detecta como error.
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import CssModuleDemo from './components/CssModuleDemo'
+```
+
+```tsx
+PASO === 3 ? <CssModuleDemo /> :
+```
+
+Cambia `PASO = 3` y guarda.
 
 ---
 
@@ -320,6 +374,18 @@ export default function StyledComponentsDemo() {
 - Añade una tercera variante `$variant?: 'primary' | 'outline' | 'danger'` y agrega `background: ${p => p.$variant === 'danger' ? '#dc2626' : ...}` — el botón cambia de color según la prop
 - Añade `&:active { transform: scale(0.97) }` dentro del template literal de `Btn` — haz clic en el botón y observa el efecto de escala en la interacción
 - Añade `font-size: 18px` directamente en el template literal de `Card` — el cambio aplica solo a ese componente sin afectar otras tarjetas del proyecto
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import StyledComponentsDemo from './components/StyledComponentsDemo'
+```
+
+```tsx
+PASO === 4 ? <StyledComponentsDemo /> :
+```
+
+Cambia `PASO = 4` y guarda.
 
 ---
 
@@ -473,6 +539,18 @@ export default function LiveStyleEditor() {
 - Añade una función `setItalic` al hook siguiendo el mismo patrón que `setBold` — agrega un checkbox en `LiveStyleEditor` para activar/desactivar la cursiva
 - Modifica `DEFAULT` para que `fontSize` sea `24` en lugar de `16` — al montar el componente el texto aparece con 24px; haz clic en "Reset" y confirma que vuelve a 24px
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import LiveStyleEditor from './components/LiveStyleEditor'
+```
+
+```tsx
+PASO === 5 ? <LiveStyleEditor /> :
+```
+
+Cambia `PASO = 5` y guarda.
+
 ---
 
 ### `src/hooks/useHover.ts`
@@ -576,6 +654,18 @@ export default function HoverDemo() {
 - Cambia `transform: 'translateY(-2px)'` a `transform: 'translateY(-6px)'` en `btn1` — el efecto de elevación es más pronunciado al hacer hover
 - Añade `opacity: 0.8` al `hoverStyle` de `btn2` — el botón se vuelve ligeramente transparente además de cambiar de color al pasar el cursor
 - Cambia `transition: 'all 0.2s'` a `transition: 'all 1s'` en el `baseStyle` de `btn1` — el efecto de hover aplica en cámara lenta durante 1 segundo
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import HoverDemo from './components/HoverDemo'
+```
+
+```tsx
+PASO === 6 ? <HoverDemo /> :
+```
+
+Cambia `PASO = 6` y guarda.
 
 ---
 
@@ -724,65 +814,38 @@ export default function ThemePanel() {
 }
 ```
 
----
-
-## Navegador de pasos — `App.tsx`
-
-```tsx
-// src/App.tsx
-
-import { ThemeProvider }    from './theme/ThemeContext'
-import CssGlobalDemo        from './components/CssGlobalDemo'
-import InlineStyleDemo      from './components/InlineStyleDemo'
-import CssModuleDemo        from './components/CssModuleDemo'
-import StyledComponentsDemo from './components/StyledComponentsDemo'
-import LiveStyleEditor      from './components/LiveStyleEditor'
-import HoverDemo            from './components/HoverDemo'
-import ThemePanel           from './components/ThemePanel'
-import './theme/theme.css'
-
-// ┌──────────────────────────────────────────────────────────────────────┐
-// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
-// │  1  CssGlobalDemo        — clases globales y riesgo de colisión     │
-// │  2  InlineStyleDemo      — objetos JS, sin :hover ni @media         │
-// │  3  CssModuleDemo        — scope local, :hover con CSS Modules      │
-// │  4  StyledComponentsDemo — CSS-in-JS con props transient ($)        │
-// │  5  LiveStyleEditor      — hook useStyles para estilos dinámicos    │
-// │  6  HoverDemo            — hook useHover para efectos hover         │
-// │  7  ThemePanel           — Context + CSS variables para theming     │
-// └──────────────────────────────────────────────────────────────────────┘
-const PASO = 1
-
-export default function App() {
-  const content =
-    PASO === 1 ? <CssGlobalDemo /> :
-    PASO === 2 ? <InlineStyleDemo /> :
-    PASO === 3 ? <CssModuleDemo /> :
-    PASO === 4 ? <StyledComponentsDemo /> :
-    PASO === 5 ? <LiveStyleEditor /> :
-    PASO === 6 ? <HoverDemo /> :
-    PASO === 7 ? <ThemePanel /> :
-    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
-
-  return (
-    <ThemeProvider>
-      <main style={{ maxWidth: 640, margin: '0 auto', padding: '32px 16px' }}>
-        {content}
-      </main>
-    </ThemeProvider>
-  )
-}
-```
-
 ### Prueba esto
 
-- Cambia `PASO = 1` y guarda — ve clases globales aplicadas con `className`
-- Cambia a `PASO = 2` — observa que los objetos JS de estilo aceptan camelCase
-- Cambia a `PASO = 3` — inspecciona en DevTools el nombre `Button_button__XXXXX` generado por CSS Modules
-- Cambia a `PASO = 4` — modifica props `$variant` o `$size` para ver cómo cambia el estilo con styled-components
-- Cambia a `PASO = 5` — ajusta los controles del `LiveStyleEditor` y ve los cambios en tiempo real
-- Cambia a `PASO = 6` — pasa el cursor sobre el elemento y verifica el estado hover via `useHover`
-- Cambia a `PASO = 7` — activa el toggle de tema oscuro y observa cómo `ThemePanel` lee las CSS variables vía Context
+- Haz clic en el botón "🌙 Modo oscuro" — el fondo, los colores y la paleta de variables cambian de inmediato porque `ThemeProvider` actualiza `data-theme` en el contenedor raíz
+- Abre DevTools e inspecciona el elemento `<main>` — observa que el atributo `data-theme` alterna entre `"light"` y `"dark"` al hacer clic en el toggle
+- Añade una nueva variable `--highlight: #f59e0b` al bloque `:root` de `theme.css` con otro valor en `[data-theme="dark"]` — úsala con `color: var(--highlight)` en el panel para que cambie con el tema
+- Desde aquí puedes volver a cualquier PASO anterior cambiando el número y guardando.
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import { ThemeProvider } from './theme/ThemeContext'
+import ThemePanel        from './components/ThemePanel'
+import './theme/theme.css'
+```
+
+```tsx
+PASO === 7 ? <ThemePanel /> :
+```
+
+También actualiza el `return` para envolver `<main>` con `<ThemeProvider>`:
+
+```tsx
+return (
+  <ThemeProvider>
+    <main style={{ maxWidth: 640, margin: '0 auto', padding: '32px 16px' }}>
+      {content}
+    </main>
+  </ThemeProvider>
+)
+```
+
+Cambia `PASO = 7` y guarda.
 
 ---
 

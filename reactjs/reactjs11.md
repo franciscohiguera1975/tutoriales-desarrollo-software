@@ -109,6 +109,32 @@ export default function ModalDemo() {
 - Haz clic en el overlay oscuro (fuera del panel blanco) y comprueba que el modal no se cierra porque no hay `onClick` en el fondo — añade `onClick={setFalse}` al div del overlay para corregirlo
 - Abre las DevTools de React y observa que `toggle`, `setTrue` y `setFalse` mantienen la misma referencia entre renders gracias a `useCallback`
 
+### `src/App.tsx`
+
+```tsx
+// src/App.tsx
+
+import ModalDemo from './components/ModalDemo'
+
+// ┌──────────────────────────────────────────────────────────────────────┐
+// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
+// │  1  ModalDemo        — useToggle: modal con overlay                 │
+// └──────────────────────────────────────────────────────────────────────┘
+const PASO = 1
+
+export default function App() {
+  const content =
+    PASO === 1 ? <ModalDemo /> :
+    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
+
+  return (
+    <main style={{ maxWidth: 600, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
+      {content}
+    </main>
+  )
+}
+```
+
 ---
 
 ## `src/hooks/useCounter.ts`
@@ -213,6 +239,18 @@ const qBtn = {
 - Añade `initialValue: 50` y comprueba que el contador empieza en `50` en lugar de `1`
 - Llama a `set(200)` desde la consola de React DevTools o un botón de prueba — observa que el valor queda limitado a `max`
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import QuantitySelector from './components/QuantitySelector'
+```
+
+```tsx
+PASO === 2 ? <QuantitySelector /> :
+```
+
+Cambia `PASO = 2` y guarda.
+
 ---
 
 ## `src/hooks/useLocalStorage.ts`
@@ -286,6 +324,18 @@ export default function ThemeSelector() {
 - Usa el hook con un tipo distinto, por ejemplo `useLocalStorage<number>('contador', 0)`, y comprueba que TypeScript infiere el tipo correcto en `setStoredValue`
 - Abre dos pestañas del mismo origen y cambia el tema en una — observa que la otra pestaña no se actualiza en tiempo real (el hook no escucha `storage` events por defecto)
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import ThemeSelector from './components/ThemeSelector'
+```
+
+```tsx
+PASO === 3 ? <ThemeSelector /> :
+```
+
+Cambia `PASO = 3` y guarda.
+
 ---
 
 ## `src/hooks/useDebounce.ts`
@@ -343,6 +393,18 @@ export default function LiveSearch() {
 - Escribe algo, espera a que `debouncedQuery` se actualice, y luego borra todo el input — observa que `debouncedQuery` vuelve a `''` y muestra `'—'`
 - Añade un segundo párrafo que muestre `query` (sin debounce) junto a `debouncedQuery` — compara ambos valores mientras escribes para ver la diferencia
 - Aplica `useDebounce` a un número en lugar de un string: `useDebounce<number>(count, 300)` — comprueba que el genérico `<T>` funciona con cualquier tipo
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import LiveSearch from './components/LiveSearch'
+```
+
+```tsx
+PASO === 4 ? <LiveSearch /> :
+```
+
+Cambia `PASO = 4` y guarda.
 
 ---
 
@@ -432,6 +494,18 @@ export default function PostList() {
 - Agrega `console.log('fetchData called')` dentro de `fetchData` y monta/desmonta el componente varias veces — verifica que el flag `cancelled` evita que se actualice el estado tras el desmontaje
 - Cambia el tipo genérico a `useFetch<Post>` (singular) con una URL de post individual (`/posts/1`) — TypeScript debe inferir que `data` es `Post | null`
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import PostList from './components/PostList'
+```
+
+```tsx
+PASO === 5 ? <PostList /> :
+```
+
+Cambia `PASO = 5` y guarda.
+
 ---
 
 ## `src/hooks/useWindowSize.ts`
@@ -471,6 +545,18 @@ export function useWindowSize(): WindowSize {
 - Monta el hook en dos componentes distintos — verifica que cada uno tiene su propio listener y ambos valores se sincronizan al mismo tiempo
 - Desmonta el componente (navega a otro paso en el App) y redimensiona — confirma que no aparecen errores de "state update on unmounted component" gracias al cleanup del `useEffect`
 - Añade `console.log('resize')` dentro de `handleResize` y redimensiona rápidamente — observa que cada pixel de cambio dispara el evento; considera añadir un debounce para optimizar
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import ResponsiveLayout from './components/ResponsiveLayout'
+```
+
+```tsx
+PASO === 6 ? <ResponsiveLayout /> :
+```
+
+Cambia `PASO = 6` y guarda.
 
 ---
 
@@ -679,58 +765,19 @@ export default function CodeBlock({ code, language = 'tsx' }: CodeBlockProps) {
 - Pasa `code=""` (string vacío) al componente — verifica que el portapapeles recibe un string vacío y el botón sigue funcionando sin errores
 - Prueba el componente en un contexto sin HTTPS (como `http://localhost` pero con `http` explícito en otro origen) — observa si `navigator.clipboard.writeText` falla y comprueba que el `catch` muestra el warning en la consola sin romper la UI
 - Renderiza dos `CodeBlock` con distintos códigos — comprueba que hacer clic en "Copiar" en uno no afecta al estado `copied` del otro
+- Desde aquí puedes volver a cualquier PASO anterior cambiando el número y guardando.
 
----
-
-## `src/App.tsx`
+### Agrega a `src/App.tsx`
 
 ```tsx
-// src/App.tsx
-
-import ModalDemo        from './components/ModalDemo'
-import QuantitySelector from './components/QuantitySelector'
-import ThemeSelector    from './components/ThemeSelector'
-import LiveSearch       from './components/LiveSearch'
-import PostList         from './components/PostList'
-import ResponsiveLayout from './components/ResponsiveLayout'
-import CodeBlock        from './components/CodeBlock'
-
-// ┌──────────────────────────────────────────────────────────────────────┐
-// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
-// │  1  ModalDemo        — useToggle: modal con overlay                 │
-// │  2  QuantitySelector — useCounter: contador con límites             │
-// │  3  ThemeSelector    — useLocalStorage: tema persistente            │
-// │  4  LiveSearch       — useDebounce: búsqueda con delay              │
-// │  5  PostList         — useFetch: lista de posts con fetch genérico  │
-// │  6  ResponsiveLayout — useMediaQuery + useWindowSize: layout        │
-// │  7  CodeBlock        — useClipboard: copiar al portapapeles         │
-// └──────────────────────────────────────────────────────────────────────┘
-const PASO = 1
-
-const EXAMPLE_CODE = `export function useToggle(initial = false) {
-  const [value, setValue] = useState(initial)
-  const toggle = useCallback(() => setValue(v => !v), [])
-  return { value, toggle }
-}`
-
-export default function App() {
-  const content =
-    PASO === 1 ? <ModalDemo /> :
-    PASO === 2 ? <QuantitySelector /> :
-    PASO === 3 ? <ThemeSelector /> :
-    PASO === 4 ? <LiveSearch /> :
-    PASO === 5 ? <PostList /> :
-    PASO === 6 ? <ResponsiveLayout /> :
-    PASO === 7 ? <CodeBlock code={EXAMPLE_CODE} language="tsx" /> :
-    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
-
-  return (
-    <main style={{ maxWidth: 600, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
-      {content}
-    </main>
-  )
-}
+import CodeBlock from './components/CodeBlock'
 ```
+
+```tsx
+PASO === 7 ? <CodeBlock code={EXAMPLE_CODE} language="tsx" /> :
+```
+
+Cambia `PASO = 7` y guarda.
 
 ---
 

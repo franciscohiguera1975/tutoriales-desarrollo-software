@@ -131,6 +131,39 @@ export default function DocumentTitle() {
 }
 ```
 
+### `src/App.tsx`
+
+```tsx
+// src/App.tsx
+
+import DocumentTitle from './components/DocumentTitle'
+
+// ┌──────────────────────────────────────────────────────────────────────┐
+// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
+// │  1  DocumentTitle    — useEffect con array vacío, limpia al desmontar│
+// │  2  OnlineStatus     — subscripción a eventos online/offline         │
+// │  3  WindowSize       — evento resize con estado objeto tipado        │
+// │  4  LiveClock        — setInterval con inicializador perezoso        │
+// │  5  SearchWithEffect — efecto con dependencia, búsqueda sincronizada │
+// │  6  DebounceSearch   — setTimeout/clearTimeout, patrón debounce      │
+// │  7  FetchUser        — fetch real, loading/error, flag cancelled      │
+// │  8  AutoFocusInput   — useRef + useEffect para foco imperativo       │
+// └──────────────────────────────────────────────────────────────────────┘
+const PASO = 1
+
+export default function App() {
+  const content =
+    PASO === 1 ? <DocumentTitle /> :
+    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
+
+  return (
+    <main style={{ maxWidth: 600, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
+      {content}
+    </main>
+  )
+}
+```
+
 ### Prueba esto
 
 - Monta el componente y mira la pestaña del navegador — el título cambia a "Mi App con React 19" justo después del primer render
@@ -177,6 +210,18 @@ export default function OnlineStatus() {
   )
 }
 ```
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import OnlineStatus from './components/OnlineStatus'
+```
+
+```tsx
+PASO === 2 ? <OnlineStatus /> :
+```
+
+Cambia `PASO = 2` y guarda.
 
 ### Prueba esto
 
@@ -230,6 +275,18 @@ export default function WindowSize() {
 }
 ```
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import WindowSize from './components/WindowSize'
+```
+
+```tsx
+PASO === 3 ? <WindowSize /> :
+```
+
+Cambia `PASO = 3` y guarda.
+
 ### Prueba esto
 
 - Arrastra el borde de la ventana del navegador para cambiar su tamaño — los números `width` y `height` se actualizan en tiempo real con cada píxel de cambio
@@ -274,6 +331,18 @@ export default function LiveClock() {
   )
 }
 ```
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import LiveClock from './components/LiveClock'
+```
+
+```tsx
+PASO === 4 ? <LiveClock /> :
+```
+
+Cambia `PASO = 4` y guarda.
 
 ### Prueba esto
 
@@ -342,6 +411,18 @@ export default function SearchWithEffect() {
 }
 ```
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import SearchWithEffect from './components/SearchWithEffect'
+```
+
+```tsx
+PASO === 5 ? <SearchWithEffect /> :
+```
+
+Cambia `PASO = 5` y guarda.
+
 ### Prueba esto
 
 - Escribe "react" en el input — el resultado aparece instantáneamente porque el efecto corre sincronizado con cada cambio de `query`
@@ -403,6 +484,18 @@ export default function DebounceSearch() {
   )
 }
 ```
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import DebounceSearch from './components/DebounceSearch'
+```
+
+```tsx
+PASO === 6 ? <DebounceSearch /> :
+```
+
+Cambia `PASO = 6` y guarda.
 
 ### Prueba esto
 
@@ -516,6 +609,18 @@ export default function FetchUser() {
 }
 ```
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import FetchUser from './components/FetchUser'
+```
+
+```tsx
+PASO === 7 ? <FetchUser /> :
+```
+
+Cambia `PASO = 7` y guarda.
+
 ### Prueba esto
 
 - Haz clic en "Usuario 1", luego "Usuario 2" rápidamente antes de que cargue el 1 — el estado de carga aparece brevemente y el resultado final muestra al usuario 2, no al 1; el flag `cancelled = true` descarta la respuesta más lenta
@@ -564,6 +669,18 @@ export default function AutoFocusInput() {
 }
 ```
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import AutoFocusInput from './components/AutoFocusInput'
+```
+
+```tsx
+PASO === 8 ? <AutoFocusInput /> :
+```
+
+Cambia `PASO = 8` y guarda. Desde aquí puedes volver a cualquier paso anterior cambiando la constante.
+
 ### Prueba esto
 
 - Monta el componente — el cursor aparece en el input sin que el usuario haga clic; es el comportamiento esperado del `.focus()` ejecutado en el `useEffect`
@@ -572,55 +689,6 @@ export default function AutoFocusInput() {
 - Cambia `useRef<HTMLInputElement>(null)` por `useRef<HTMLTextAreaElement>(null)` y el `<input>` por `<textarea>` — el auto-foco funciona igual con cualquier elemento focusable
 - Agrega un segundo `useRef<HTMLInputElement>(null)` llamado `buttonRef` y asócialo a un `<button>` — en el `useEffect` llama `.focus()` en el botón en vez del input; observa que el botón queda con el foco activo y se puede presionar con Enter
 - Reemplaza `useEffect(() => { inputRef.current?.focus() }, [])` por llamar `inputRef.current?.focus()` directamente en el cuerpo del componente (sin `useEffect`) — obtendrás un error porque `inputRef.current` todavía es `null` en el momento del render, antes de que React monte el DOM
-
----
-
-### `src/App.tsx`
-
-```tsx
-// src/App.tsx
-
-import DocumentTitle    from './components/DocumentTitle'
-import OnlineStatus     from './components/OnlineStatus'
-import WindowSize       from './components/WindowSize'
-import LiveClock        from './components/LiveClock'
-import SearchWithEffect from './components/SearchWithEffect'
-import DebounceSearch   from './components/DebounceSearch'
-import FetchUser        from './components/FetchUser'
-import AutoFocusInput   from './components/AutoFocusInput'
-
-// ┌──────────────────────────────────────────────────────────────────────┐
-// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
-// │  1  DocumentTitle    — useEffect con array vacío, limpia al desmontar│
-// │  2  OnlineStatus     — subscripción a eventos online/offline         │
-// │  3  WindowSize       — evento resize con estado objeto tipado        │
-// │  4  LiveClock        — setInterval con inicializador perezoso        │
-// │  5  SearchWithEffect — efecto con dependencia, búsqueda sincronizada │
-// │  6  DebounceSearch   — setTimeout/clearTimeout, patrón debounce      │
-// │  7  FetchUser        — fetch real, loading/error, flag cancelled      │
-// │  8  AutoFocusInput   — useRef + useEffect para foco imperativo       │
-// └──────────────────────────────────────────────────────────────────────┘
-const PASO = 1
-
-export default function App() {
-  const content =
-    PASO === 1 ? <DocumentTitle /> :
-    PASO === 2 ? <OnlineStatus /> :
-    PASO === 3 ? <WindowSize /> :
-    PASO === 4 ? <LiveClock /> :
-    PASO === 5 ? <SearchWithEffect /> :
-    PASO === 6 ? <DebounceSearch /> :
-    PASO === 7 ? <FetchUser /> :
-    PASO === 8 ? <AutoFocusInput /> :
-    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
-
-  return (
-    <main style={{ maxWidth: 600, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
-      {content}
-    </main>
-  )
-}
-```
 
 ---
 

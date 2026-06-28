@@ -110,6 +110,33 @@ const submitBtn = {
 - Cambia `!email.includes('@')` por `!/^[^@]+@[^@]+\.[^@]+$/.test(email)` en la validación — ahora `usuario@` ya no pasa la validación y el error aparece correctamente
 - Añade un tercer campo `phone` con su propio `useState` y agrega la condición `!phone.trim()` a la validación — el formulario ahora requiere los tres campos
 
+### `src/App.tsx`
+
+```tsx
+// src/App.tsx
+
+import BasicForm from './components/BasicForm'
+// ┌──────────────────────────────────────────────────────────────────────┐
+// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
+// │  1  BasicForm            — formulario controlado básico             │
+// │  2  ManualValidationForm — validación manual con touched            │
+// │  3  ZodRegistrationForm  — validación con Zod v4                   │
+// │  4  ContactForm          — envío async con useReducer               │
+// └──────────────────────────────────────────────────────────────────────┘
+const PASO = 1
+
+export default function App() {
+  const content = PASO === 1 ? <BasicForm /> :
+    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
+
+  return (
+    <main style={{ maxWidth: 420, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
+      {content}
+    </main>
+  )
+}
+```
+
 ---
 
 ## Validación manual con TypeScript
@@ -296,6 +323,18 @@ function Field({ label, value, error, placeholder, type = 'text', onChange, onBl
 - Envía el formulario con todos los campos válidos — aparece el banner verde "Formulario enviado correctamente" y el botón se deshabilita (`disabled={success}`)
 - Añade un campo `confirmPassword` al tipo `FormValues` y valida en `validateForm` que coincida con `password` — el error "Las contraseñas no coinciden" aparece si son diferentes
 - Cambia el condicional `if (touched[field])` en `handleChange` por `if (true)` — la validación ocurre en tiempo real desde el primer carácter sin necesidad de salir del campo
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import ManualValidationForm from './components/ManualValidationForm'
+```
+
+```tsx
+PASO === 2 ? <ManualValidationForm /> :
+```
+
+Cambia `PASO = 2` y guarda.
 
 ---
 
@@ -525,6 +564,18 @@ const errorStyle = { margin: 0, fontSize: 12, color: '#ef4444' }
 - Escribe en el campo "Nombre completo" y luego bórralo — el error desaparece al escribir porque `handleChange` ejecuta `setErrors((prev) => ({ ...prev, [field]: undefined }))` en cada cambio
 - Envía el formulario con todos los datos válidos y abre la consola — observa que `result.data` está completamente tipado: TypeScript infiere los tipos desde el schema de Zod
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import ZodRegistrationForm from './components/ZodRegistrationForm'
+```
+
+```tsx
+PASO === 3 ? <ZodRegistrationForm /> :
+```
+
+Cambia `PASO = 3` y guarda.
+
 ---
 
 ## Formulario de contacto con `useReducer`
@@ -701,43 +752,19 @@ export default function ContactForm() {
 - Haz clic en "Limpiar" mientras el formulario tiene texto — todos los campos vuelven a estar vacíos porque `RESET` retorna `INITIAL` directamente
 - Añade un nuevo caso al reducer: `case 'RESET_ERRORS': return { ...state, errors: {} }` y agrega un botón que lo dispare — los errores desaparecen sin resetear los valores
 - Cambia el `setTimeout` de 1200 a 50 y lanza un `throw new Error()` dentro del `try` — el banner rojo "Error al enviar" aparece y el formulario mantiene los datos para reintentarlo
+- Desde aquí puedes volver a cualquier PASO anterior cambiando el número y guardando.
 
----
-
-## `src/App.tsx`
+### Agrega a `src/App.tsx`
 
 ```tsx
-// src/App.tsx
-
-import BasicForm            from './components/BasicForm'
-import ManualValidationForm from './components/ManualValidationForm'
-import ZodRegistrationForm  from './components/ZodRegistrationForm'
-import ContactForm          from './components/ContactForm'
-
-// ┌──────────────────────────────────────────────────────────────────────┐
-// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
-// │  1  BasicForm            — formulario controlado básico             │
-// │  2  ManualValidationForm — validación manual con touched            │
-// │  3  ZodRegistrationForm  — validación con Zod v4                   │
-// │  4  ContactForm          — envío async con useReducer               │
-// └──────────────────────────────────────────────────────────────────────┘
-const PASO = 1
-
-export default function App() {
-  const content =
-    PASO === 1 ? <BasicForm /> :
-    PASO === 2 ? <ManualValidationForm /> :
-    PASO === 3 ? <ZodRegistrationForm /> :
-    PASO === 4 ? <ContactForm /> :
-    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
-
-  return (
-    <main style={{ maxWidth: 420, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
-      {content}
-    </main>
-  )
-}
+import ContactForm from './components/ContactForm'
 ```
+
+```tsx
+PASO === 4 ? <ContactForm /> :
+```
+
+Cambia `PASO = 4` y guarda.
 
 ---
 

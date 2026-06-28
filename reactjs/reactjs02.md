@@ -269,6 +269,18 @@ export default function ProductCard({
 - Usa `React.CSSProperties` para extraer el estilo del div a una constante: `const cardStyle: React.CSSProperties = { ... }` — necesitarás `import React from 'react'`
 - Cambia `borderRadius: 8` a `0` y luego a `20` — observa cómo cambia el aspecto de la tarjeta sin tocar ninguna otra propiedad
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import ProductCard from './components/ProductCard'
+```
+
+```tsx
+PASO === 11 ? <ProductCard title="Teclado inalámbrico" description="Bluetooth 5.0, retroiluminado" highlighted /> :
+```
+
+Cambia `PASO = 11` y guarda.
+
 ---
 
 ### `src/components/ProductCatalogList.tsx`
@@ -337,6 +349,27 @@ export default function ProductCatalogList({
 - Añade `category?: string` a la interfaz `Product` y muéstrala en un `<em>` dentro del `<span>` — TypeScript marca error si usas la prop antes de declararla
 - Cambia `listStyle: 'none'` a `'disc'` en el `<ul>` — los bullets de lista HTML reaparecen; observa que en JSX es `listStyle`, no `list-style`
 - Añade un `<footer>` debajo del `<ul>` con `{products.length} producto(s)` — la longitud del array se calcula directamente desde la prop
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import ProductCatalogList from './components/ProductCatalogList'
+```
+
+```tsx
+const catalog = [
+  { id: 1, name: 'Teclado mecánico',  price: 89.99 },
+  { id: 2, name: 'Monitor 27 pulgadas', price: 349.99 },
+  { id: 3, name: 'Mouse inalámbrico', price: 29.99, outOfStock: true },
+  { id: 4, name: 'Webcam HD',         price: 59.99 },
+]
+```
+
+```tsx
+PASO === 12 ? <ProductCatalogList products={catalog} title="Productos disponibles" /> :
+```
+
+Cambia `PASO = 12` y guarda.
 
 ---
 
@@ -517,6 +550,28 @@ export default function App() {
 - Añade `'GraphQL'` al array `skills` de Ana — la nueva habilidad se renderiza sin cambiar el componente
 - Extrae el cálculo de `initials` a una función pura `getInitials(name: string): string` fuera del componente y anota el tipo de retorno
 - Añade una prop `avatar?: string` para una URL de imagen y muestra un `<img>` en lugar del círculo de iniciales cuando la prop esté presente
+- Desde aquí puedes volver a cualquier PASO anterior cambiando el número y guardando.
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import UserProfileCard from './components/UserProfileCard'
+```
+
+```tsx
+PASO === 13 ? (
+  <UserProfileCard
+    fullName="Ana García"
+    email="ana@ejemplo.com"
+    role="admin"
+    isActive={true}
+    skills={['TypeScript', 'React', 'Node.js']}
+    bio="Desarrolladora fullstack con 5 años de experiencia."
+  />
+) :
+```
+
+Cambia `PASO = 13` y guarda.
 
 ---
 
@@ -574,6 +629,42 @@ export default function WelcomeBanner() {
 - Añade `borderRadius: 0` al `<div>` — el banner pierde sus esquinas redondeadas
 - Añade una prop `subtitle?: string` y reemplaza el texto estático del `<p>` con `{subtitle ?? 'Aprende React 19 con TypeScript'}` — el `??` usa el valor por defecto solo cuando `subtitle` es `null` o `undefined`
 - Mueve el componente a `src/components/WelcomeBanner.tsx` e impórtalo en `App.tsx` — TypeScript infiere el tipo de retorno del JSX sin anotación explícita
+
+### `src/App.tsx`
+
+```tsx
+// src/App.tsx
+
+import WelcomeBanner from './components/WelcomeBanner'
+// ┌──────────────────────────────────────────────────────────────────────────┐
+// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.          │
+// │   1  WelcomeBanner       — banner estático sin props                    │
+// │   2  UserGreeting        — props string + cálculo de iniciales          │
+// │   3  CurrentDateDisplay  — fecha calculada al renderizar                │
+// │   4  ColoredBox          — estilos dinámicos con props numéricas        │
+// │   5  ConditionalGreeting — renderizado condicional + tipo unión         │
+// │   6  FruitList           — lista tipada con .map()                      │
+// │   7  PriceTag            — cálculos con props numéricas                 │
+// │   8  StatusBadge         — Record para mapear tipos a estilos           │
+// │   9  MiniProfileCard     — composición de componentes                   │
+// │  10  SimpleInfoTable     — tabla con rows tipadas                       │
+// │  11  ProductCard         — interfaz de props con opcionales y booleanas │
+// │  12  ProductCatalogList  — lista con renderizado condicional de items   │
+// │  13  UserProfileCard     — ejercicio: props complejas + rol             │
+// └──────────────────────────────────────────────────────────────────────────┘
+const PASO = 1
+
+export default function App() {
+  const content = PASO === 1 ? <WelcomeBanner /> :
+    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
+
+  return (
+    <main style={{ maxWidth: 540, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
+      {content}
+    </main>
+  )
+}
+```
 
 ---
 
@@ -639,6 +730,18 @@ export default function UserGreeting({ name, occupation }: UserGreetingProps) {
 - Añade `online?: boolean` a las props y renderiza un círculo verde pequeño superpuesto al avatar cuando sea `true` usando `position: 'relative'` en el contenedor e `position: 'absolute'` en el punto
 - Cambia `gap: 12` a `gap: 4` en el `<div>` externo — el avatar y el nombre se acercan
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import UserGreeting from './components/UserGreeting'
+```
+
+```tsx
+PASO === 2 ? <UserGreeting name="Ana García" occupation="Desarrolladora Frontend" /> :
+```
+
+Cambia `PASO = 2` y guarda.
+
 ---
 
 ### `src/components/CurrentDateDisplay.tsx`
@@ -683,6 +786,18 @@ export default function CurrentDateDisplay() {
 - Añade `timeZone: 'America/Mexico_City'` a las opciones de fecha — la hora cambia a la zona horaria de Ciudad de México
 - Añade una prop `showTime?: boolean` y condiciona el `<span>` de la hora a que sea `true` con `{showTime && <span>...}</span>}`
 - Recarga la página con `Ctrl+R` — la fecha mostrada cambia a la hora actual del nuevo render; sin estado, el valor es fijo por render
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import CurrentDateDisplay from './components/CurrentDateDisplay'
+```
+
+```tsx
+PASO === 3 ? <CurrentDateDisplay /> :
+```
+
+Cambia `PASO = 3` y guarda.
 
 ---
 
@@ -738,6 +853,24 @@ export default function ColoredBox({
 - Añade `borderRadius?: number` con valor por defecto `8` y pásalo al `<div>` — con `borderRadius={50}` y `width === height`, el resultado es un círculo perfecto
 - Añade `onClick?: () => void` a las props y aplícalo al `<div>` — en `App.tsx` pasa `onClick={() => alert(color)}` para mostrar el color al hacer clic
 - Cambia `border: '1px solid rgba(0,0,0,0.1)'` a `'none'` — el sutil borde desaparece; útil para comparar si el color ya tiene suficiente contraste con el fondo
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import ColoredBox from './components/ColoredBox'
+```
+
+```tsx
+PASO === 4 ? (
+  <div style={{ display: 'flex', gap: 12 }}>
+    <ColoredBox color="#0070f3" label="Primary" />
+    <ColoredBox color="#22c55e" label="Success" />
+    <ColoredBox color="#e00"    label="Danger" />
+  </div>
+) :
+```
+
+Cambia `PASO = 4` y guarda.
 
 ---
 
@@ -797,6 +930,18 @@ export default function ConditionalGreeting({
 - Añade una prop `greeting?: string` que reemplace el saludo del Record cuando esté presente: `greeting ?? greetings[timeOfDay]`
 - Cambia el `if (!isLoggedIn)` a un ternario en el `return` — ambas formas son válidas; el early return con `if` suele preferirse para casos de error o loading
 - Prueba pasar `timeOfDay` sin valor y observa que usa `'morning'` por el valor por defecto del destructuring
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import ConditionalGreeting from './components/ConditionalGreeting'
+```
+
+```tsx
+PASO === 5 ? <ConditionalGreeting isLoggedIn={true} userName="Ana" timeOfDay="afternoon" /> :
+```
+
+Cambia `PASO = 5` y guarda.
 
 ---
 
@@ -866,6 +1011,26 @@ const myFruits = [
 - Cambia la `key` a índice: `.map((fruit, i) => ... key={i})` — funciona pero React lo desaconseja si el orden puede cambiar; `fruit.name` es más estable
 - Añade ordenamiento antes del `return`: `const sorted = [...fruits].sort((a, b) => a.calories - b.calories)` y renderiza `sorted` — no mutes `fruits` directamente
 - Cambia `borderBottom: '1px solid #eee'` a `borderBottom: 'none'` en el `<li>` y agrega `backgroundColor` alterno usando el índice del `.map()`
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import FruitList from './components/FruitList'
+```
+
+```tsx
+const fruits = [
+  { name: 'Manzana', emoji: '🍎', calories: 52 },
+  { name: 'Banana',  emoji: '🍌', calories: 89 },
+  { name: 'Naranja', emoji: '🍊', calories: 47 },
+]
+```
+
+```tsx
+PASO === 6 ? <FruitList fruits={fruits} title="Frutas favoritas" /> :
+```
+
+Cambia `PASO = 6` y guarda.
 
 ---
 
@@ -937,6 +1102,23 @@ export default function PriceTag({
 - Añade `size?: 'small' | 'large'` y cambia el `fontSize` del precio según el tamaño: `16` para `small`, `32` para `large`
 - Cambia `color: hasDiscount ? '#e00' : '#333'` a un tercer color cuando el precio sea mayor de 100 usando un ternario anidado
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import PriceTag from './components/PriceTag'
+```
+
+```tsx
+PASO === 7 ? (
+  <div style={{ display: 'flex', gap: 24, alignItems: 'flex-end' }}>
+    <PriceTag amount={99.99} currency="USD" />
+    <PriceTag amount={99.99} currency="USD" discountPercent={20} />
+  </div>
+) :
+```
+
+Cambia `PASO = 7` y guarda.
+
 ---
 
 ### `src/components/StatusBadge.tsx`
@@ -997,6 +1179,25 @@ export default function StatusBadge({ status, label }: StatusBadgeProps) {
 - Añade `icon?: string` a las props y renderiza el emoji antes del texto: `` {icon && `${icon} `}{label ?? text} ``
 - Cambia `padding: '3px 10px'` a `'6px 16px'` — el badge crece; experimenta con otros valores para ver el efecto del espaciado interno
 - Usa `<StatusBadge status="error" />` dentro de `MiniProfileCard` en lugar del badge hard-codeado — observa que los tipos se propagan correctamente entre componentes
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import StatusBadge from './components/StatusBadge'
+```
+
+```tsx
+PASO === 8 ? (
+  <div style={{ display: 'flex', gap: 8 }}>
+    <StatusBadge status="active" />
+    <StatusBadge status="pending" />
+    <StatusBadge status="error" />
+    <StatusBadge status="inactive" />
+  </div>
+) :
+```
+
+Cambia `PASO = 8` y guarda.
 
 ---
 
@@ -1110,6 +1311,26 @@ export default function MiniProfileCard({
 - Añade una segunda `MiniProfileCard` con datos distintos en `App.tsx` — cada instancia calcula sus propias iniciales y su propio contador de años
 - Añade `avatarColor?: string` a las props y úsalo en lugar del `'#6366f1'` fijo para personalizar el avatar por instancia
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import MiniProfileCard from './components/MiniProfileCard'
+```
+
+```tsx
+PASO === 9 ? (
+  <MiniProfileCard
+    fullName="Ana García"
+    role="Senior Developer"
+    department="Ingeniería"
+    status="active"
+    joinedYear={2019}
+  />
+) :
+```
+
+Cambia `PASO = 9` y guarda.
+
 ---
 
 ### `src/components/SimpleInfoTable.tsx`
@@ -1193,126 +1414,26 @@ export default function SimpleInfoTable({ title, rows }: SimpleInfoTableProps) {
 - Cambia `width: '45%'` de la primera columna `<td>` a `'60%'` — la columna de etiquetas se amplía y la de valores se comprime
 - Añade una nueva fila con `value: 0` — observa que el `{row.value}` la muestra sin problema; `0` es un valor válido en JSX a diferencia de `false`, `null` o `undefined`
 
----
-
-### `src/App.tsx` — navegador de pasos
+### Agrega a `src/App.tsx`
 
 ```tsx
-// src/App.tsx
-
-import WelcomeBanner       from './components/WelcomeBanner'
-import UserGreeting        from './components/UserGreeting'
-import CurrentDateDisplay  from './components/CurrentDateDisplay'
-import ColoredBox          from './components/ColoredBox'
-import ConditionalGreeting from './components/ConditionalGreeting'
-import FruitList           from './components/FruitList'
-import PriceTag            from './components/PriceTag'
-import StatusBadge         from './components/StatusBadge'
-import MiniProfileCard     from './components/MiniProfileCard'
-import SimpleInfoTable     from './components/SimpleInfoTable'
-import ProductCard         from './components/ProductCard'
-import ProductCatalogList  from './components/ProductCatalogList'
-import UserProfileCard     from './components/UserProfileCard'
-
-// ┌──────────────────────────────────────────────────────────────────────────┐
-// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.          │
-// │   1  WelcomeBanner       — banner estático sin props                    │
-// │   2  UserGreeting        — props string + cálculo de iniciales          │
-// │   3  CurrentDateDisplay  — fecha calculada al renderizar                │
-// │   4  ColoredBox          — estilos dinámicos con props numéricas        │
-// │   5  ConditionalGreeting — renderizado condicional + tipo unión         │
-// │   6  FruitList           — lista tipada con .map()                      │
-// │   7  PriceTag            — cálculos con props numéricas                 │
-// │   8  StatusBadge         — Record para mapear tipos a estilos           │
-// │   9  MiniProfileCard     — composición de componentes                   │
-// │  10  SimpleInfoTable     — tabla con rows tipadas                       │
-// │  11  ProductCard         — interfaz de props con opcionales y booleanas │
-// │  12  ProductCatalogList  — lista con renderizado condicional de items   │
-// │  13  UserProfileCard     — ejercicio: props complejas + rol             │
-// └──────────────────────────────────────────────────────────────────────────┘
-const PASO = 1
-
-const fruits = [
-  { name: 'Manzana', emoji: '🍎', calories: 52 },
-  { name: 'Banana',  emoji: '🍌', calories: 89 },
-  { name: 'Naranja', emoji: '🍊', calories: 47 },
-]
-
-const catalog = [
-  { id: 1, name: 'Teclado mecánico',  price: 89.99 },
-  { id: 2, name: 'Monitor 27 pulgadas', price: 349.99 },
-  { id: 3, name: 'Mouse inalámbrico', price: 29.99, outOfStock: true },
-  { id: 4, name: 'Webcam HD',         price: 59.99 },
-]
-
-export default function App() {
-  const content =
-    PASO ===  1 ? <WelcomeBanner /> :
-    PASO ===  2 ? <UserGreeting name="Ana García" occupation="Desarrolladora Frontend" /> :
-    PASO ===  3 ? <CurrentDateDisplay /> :
-    PASO ===  4 ? (
-      <div style={{ display: 'flex', gap: 12 }}>
-        <ColoredBox color="#0070f3" label="Primary" />
-        <ColoredBox color="#22c55e" label="Success" />
-        <ColoredBox color="#e00"    label="Danger" />
-      </div>
-    ) :
-    PASO ===  5 ? <ConditionalGreeting isLoggedIn={true} userName="Ana" timeOfDay="afternoon" /> :
-    PASO ===  6 ? <FruitList fruits={fruits} title="Frutas favoritas" /> :
-    PASO ===  7 ? (
-      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-end' }}>
-        <PriceTag amount={99.99} currency="USD" />
-        <PriceTag amount={99.99} currency="USD" discountPercent={20} />
-      </div>
-    ) :
-    PASO ===  8 ? (
-      <div style={{ display: 'flex', gap: 8 }}>
-        <StatusBadge status="active" />
-        <StatusBadge status="pending" />
-        <StatusBadge status="error" />
-        <StatusBadge status="inactive" />
-      </div>
-    ) :
-    PASO ===  9 ? (
-      <MiniProfileCard
-        fullName="Ana García"
-        role="Senior Developer"
-        department="Ingeniería"
-        status="active"
-        joinedYear={2019}
-      />
-    ) :
-    PASO === 10 ? (
-      <SimpleInfoTable
-        title="Resumen del pedido"
-        rows={[
-          { label: 'Subtotal',  value: '$89.99' },
-          { label: 'Envío',     value: '$5.00' },
-          { label: 'Total',     value: '$94.99', highlight: true },
-        ]}
-      />
-    ) :
-    PASO === 11 ? <ProductCard title="Teclado inalámbrico" description="Bluetooth 5.0, retroiluminado" highlighted /> :
-    PASO === 12 ? <ProductCatalogList products={catalog} title="Productos disponibles" /> :
-    PASO === 13 ? (
-      <UserProfileCard
-        fullName="Ana García"
-        email="ana@ejemplo.com"
-        role="admin"
-        isActive={true}
-        skills={['TypeScript', 'React', 'Node.js']}
-        bio="Desarrolladora fullstack con 5 años de experiencia."
-      />
-    ) :
-    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
-
-  return (
-    <main style={{ maxWidth: 540, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
-      {content}
-    </main>
-  )
-}
+import SimpleInfoTable from './components/SimpleInfoTable'
 ```
+
+```tsx
+PASO === 10 ? (
+  <SimpleInfoTable
+    title="Resumen del pedido"
+    rows={[
+      { label: 'Subtotal',  value: '$89.99' },
+      { label: 'Envío',     value: '$5.00' },
+      { label: 'Total',     value: '$94.99', highlight: true },
+    ]}
+  />
+) :
+```
+
+Cambia `PASO = 10` y guarda.
 
 ---
 

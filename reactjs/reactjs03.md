@@ -200,12 +200,43 @@ export default function UserAvatar({
 
 ### Prueba esto
 
-- Pasa `size={80}` — el avatar crece; el `fontSize` interno se calcula como `size * 0.35`, manteniéndose proporcional
-- Pasa `fullName="María López Ruiz"` — las iniciales calculadas son `"ML"` por el `.slice(0, 2)` al final
-- Añade `src="https://i.pravatar.cc/80"` — el componente muestra `<img>` en lugar del círculo de iniciales gracias al `if (src)`
-- Cambia `backgroundColor: '#0070f3'` a `'#7c3aed'` — todos los avatares sin `src` reflejan el nuevo color
-- Añade `ring?: boolean` a las props y, cuando sea `true`, añade `outline: '3px solid #0070f3'` al estilo del `<div>`
-- Pasa `fullName="A"` — el avatar muestra solo `"A"`; el cálculo de iniciales funciona con cualquier longitud de nombre
+> Establece `const PASO = 1` en `App.tsx` y guarda — verás `<UserAvatar fullName="Ana García" size={64} />` renderizado en pantalla.
+
+- En el `<UserAvatar>` de `App.tsx` (PASO 1), cambia `size={64}` a `size={80}` — el avatar crece; el `fontSize` interno se calcula como `size * 0.35`, manteniéndose proporcional
+- En el `<UserAvatar>` de `App.tsx`, cambia `fullName="Ana García"` a `fullName="María López Ruiz"` — las iniciales calculadas son `"ML"` por el `.slice(0, 2)` al final
+- En el `<UserAvatar>` de `App.tsx`, añade `src="https://i.pravatar.cc/80"` — el componente muestra `<img>` en lugar del círculo de iniciales gracias al `if (src)`
+- En `UserAvatar.tsx`, cambia `backgroundColor: '#0070f3'` a `'#7c3aed'` — todos los avatares sin `src` reflejan el nuevo color
+- En `UserAvatar.tsx`, añade `ring?: boolean` a las props y, cuando sea `true`, añade `outline: '3px solid #0070f3'` al estilo del `<div>`
+- En el `<UserAvatar>` de `App.tsx`, cambia `fullName="Ana García"` a `fullName="A"` — el avatar muestra solo `"A"`; el cálculo de iniciales funciona con cualquier longitud de nombre
+
+### `src/App.tsx`
+
+```tsx
+// src/App.tsx
+
+import UserAvatar from './components/UserAvatar'
+// ┌──────────────────────────────────────────────────────────────────────┐
+// │  1  UserAvatar          — avatar con iniciales o imagen             │
+// │  2  ActionButton        — botón tipado con variantes                │
+// │  3  ContentCard         — composición con children                  │
+// │  4  UserSessionHeader   — UserAvatar + ActionButton                 │
+// │  5  UserDashboardPanel  — panel completo integrado                  │
+// │  6  RatingStars         — 5 estrellas con callback onRate           │
+// │  7  ConfirmDialog       — diálogo con callbacks onConfirm/onCancel  │
+// └──────────────────────────────────────────────────────────────────────┘
+const PASO = 1
+
+export default function App() {
+  const content = PASO === 1 ? <UserAvatar fullName="Ana García" size={64} /> :
+    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
+
+  return (
+    <main style={{ maxWidth: 560, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
+      {content}
+    </main>
+  )
+}
+```
 
 ---
 
@@ -263,12 +294,33 @@ export default function ActionButton({
 
 ### Prueba esto
 
-- Cambia `variant="danger"` a `"secondary"` en `App.tsx` — el botón cambia de rojo a gris sin tocar el componente
-- Pasa `disabled={true}` — el cursor cambia a `not-allowed` y la opacidad baja a `0.5` gracias al operador ternario en `baseStyle`
-- Añade `'ghost'` al tipo `ButtonVariant` y su entrada en `variantStyles`: `{ backgroundColor: 'transparent', color: '#0070f3' }` — TypeScript marcará error hasta que el `Record` esté completo
-- Cambia `padding: '8px 16px'` a `'12px 24px'` — el botón crece; experimenta con otros valores de padding
-- Añade `icon?: string` a las props y renderiza `{icon && <span style={{ marginRight: 6 }}>{icon}</span>}` antes del `{label}`
-- Pasa `onAction={handleSave()}` (con paréntesis) — observa cómo el botón ejecuta la función al renderizar, no al hacer clic; es el error más frecuente con callbacks
+> Establece `const PASO = 2` en `App.tsx` y guarda — verás cuatro botones (primario, secundario, peligro y desactivado) en pantalla.
+
+- En `App.tsx` (PASO 2), cambia `variant="danger"` a `"secondary"` en el tercer `<ActionButton>` — el botón cambia de rojo a gris sin tocar el componente
+- En `App.tsx`, pasa `disabled={true}` al primer `<ActionButton>` — el cursor cambia a `not-allowed` y la opacidad baja a `0.5` gracias al operador ternario en `baseStyle`
+- En `ActionButton.tsx`, añade `'ghost'` al tipo `ButtonVariant` y su entrada en `variantStyles`: `{ backgroundColor: 'transparent', color: '#0070f3' }` — TypeScript marcará error hasta que el `Record` esté completo
+- En `ActionButton.tsx`, cambia `padding: '8px 16px'` a `'12px 24px'` — el botón crece; experimenta con otros valores de padding
+- En `ActionButton.tsx`, añade `icon?: string` a las props y renderiza `{icon && <span style={{ marginRight: 6 }}>{icon}</span>}` antes del `{label}`
+- En `App.tsx`, cambia `onAction={() => alert('primario')}` a `onAction={alert('primario')}` (sin la función flecha) — el alert se dispara al cargar la página, no al hacer clic; es el error más frecuente con callbacks
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import ActionButton from './components/ActionButton'
+```
+
+```tsx
+PASO === 2 ? (
+  <div style={{ display: 'flex', gap: 8 }}>
+    <ActionButton label="Primario"    onAction={() => alert('primario')} />
+    <ActionButton label="Secundario"  onAction={() => {}} variant="secondary" />
+    <ActionButton label="Peligro"     onAction={() => {}} variant="danger" />
+    <ActionButton label="Desactivado" onAction={() => {}} disabled />
+  </div>
+) :
+```
+
+Cambia `PASO = 2` y guarda.
 
 ---
 
@@ -307,12 +359,31 @@ export default function ContentCard({
 
 ### Prueba esto
 
-- Pasa diferentes elementos como `children`: un `<ul>`, un `<img>`, texto plano — `React.ReactNode` acepta cualquier JSX válido
-- Anida dos `<ContentCard>` una dentro de la otra — `children` puede incluir otros componentes, incluyendo el mismo componente
-- Añade `subtitle?: string` a las props y muéstralo entre el `<h3>` y el `<div>{children}</div>` con color gris
-- Cambia `padding: 20` a `40` y `borderRadius: 10` a `0` — la tarjeta se vuelve más compacta y sin esquinas redondeadas
-- Usa `children` como función: `children?: (title: string) => React.ReactNode` — esto es el patrón "render prop"; pásalo como `{(t) => <p>{t}</p>}`
-- Añade `footer?: React.ReactNode` como segunda área de contenido debajo del `<div>{children}</div>`
+> Establece `const PASO = 3` en `App.tsx` y guarda — verás `ContentCard` con un párrafo y un botón como `children`.
+
+- En el `<ContentCard>` de `App.tsx` (PASO 3), reemplaza el `<p>` por un `<ul>` con tres ítems o un `<img>` — `React.ReactNode` acepta cualquier JSX válido
+- En `App.tsx`, anida un segundo `<ContentCard>` dentro del primero como `children` — `children` puede incluir otros componentes, incluyendo el mismo componente
+- En `ContentCard.tsx`, añade `subtitle?: string` a las props y muéstralo entre el `<h3>` y el `<div>{children}</div>` con color gris; en `App.tsx` pasa `subtitle="Subtítulo de prueba"`
+- En `ContentCard.tsx`, cambia `padding: 20` a `40` y `borderRadius: 10` a `0` — la tarjeta se amplía y pierde las esquinas redondeadas
+- En `ContentCard.tsx`, usa `children` como función: `children?: (title: string) => React.ReactNode` — es el patrón "render prop"; en `App.tsx` pásalo como `{(t) => <p>{t}</p>}`
+- En `ContentCard.tsx`, añade `footer?: React.ReactNode` y renderízalo debajo del `<div>{children}</div>`; en `App.tsx` pasa `footer={<p>Pie de tarjeta</p>}`
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import ContentCard from './components/ContentCard'
+```
+
+```tsx
+PASO === 3 ? (
+  <ContentCard title="Sección de ejemplo">
+    <p>Este párrafo es el children de ContentCard.</p>
+    <ActionButton label="Acción" onAction={() => alert('click')} />
+  </ContentCard>
+) :
+```
+
+Cambia `PASO = 3` y guarda.
 
 ---
 
@@ -369,11 +440,31 @@ export default function UserSessionHeader({
 
 ### Prueba esto
 
-- Cambia `variant="secondary"` a `"danger"` en el `ActionButton` de logout — el botón se vuelve rojo sin tocar el componente padre
-- Pasa `avatarSrc="https://i.pravatar.cc/80"` desde `App.tsx` — `UserSessionHeader` reenvía la prop a `UserAvatar` que muestra la imagen
-- Añade `lastSeen?: string` a las props y muéstralo debajo del rol: `<p style={{ margin: 0, fontSize: 11, color: '#bbb' }}>{lastSeen}</p>`
-- Cambia `gap: 12` a `32` en el div externo — más espacio entre avatar, nombre y botón de logout
-- Observa que este componente no importa React aunque renderiza JSX — porque no usa ningún tipo `React.*`; sus hijos se importan directamente
+> Establece `const PASO = 4` en `App.tsx` y guarda — verás el encabezado con avatar de iniciales, nombre, rol y botón "Cerrar sesión".
+
+- En `UserSessionHeader.tsx`, cambia `variant="secondary"` a `"danger"` en el `<ActionButton>` de logout — el botón se vuelve rojo sin tocar el componente padre
+- En el `<UserSessionHeader>` de `App.tsx` (PASO 4), añade `avatarSrc="https://i.pravatar.cc/80"` — el componente reenvía la prop a `UserAvatar`, que muestra la imagen en lugar del círculo de iniciales
+- En `UserSessionHeader.tsx`, añade `lastSeen?: string` a las props y muéstralo debajo del rol: `<p style={{ margin: 0, fontSize: 11, color: '#bbb' }}>{lastSeen}</p>`; en `App.tsx` pasa `lastSeen="Hace 2 horas"`
+- En `UserSessionHeader.tsx`, cambia `gap: 12` a `32` en el div externo — más espacio entre avatar, nombre y botón de logout
+- Observa que `UserSessionHeader.tsx` no importa React aunque renderiza JSX — porque no usa ningún tipo `React.*`; sus hijos se importan directamente
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import UserSessionHeader from './components/UserSessionHeader'
+```
+
+```tsx
+PASO === 4 ? (
+  <UserSessionHeader
+    fullName="Ana García"
+    role="Administradora"
+    onLogout={() => alert('Sesión cerrada. Redirigiendo al login...')}
+  />
+) :
+```
+
+Cambia `PASO = 4` y guarda.
 
 ---
 
@@ -435,116 +526,205 @@ export default function UserDashboardPanel({
 
 ### Prueba esto
 
-- Haz clic en el botón "Nuevo proyecto" en la app — llama a `handleCreateProject` en `App.tsx`; observa cómo el callback sube del nieto al abuelo
-- Añade un tercer `<ContentCard title="Tareas pendientes">` con una lista `<ul>` hardcodeada de tres tareas
-- Cambia el saludo `currentUser.fullName` a `currentUser.fullName.split(' ')[0]` — muestra solo el primer nombre
-- Añade `isAdmin?: boolean` a `CurrentUser` y condiciona un badge `"Admin"` junto al nombre en el header
-- Observa el árbol de imports: `App → UserDashboardPanel → { UserSessionHeader → { UserAvatar, ActionButton }, ContentCard, ActionButton }` — cada componente es responsable de importar sus hijos
+> Establece `const PASO = 5` en `App.tsx` y guarda — verás el panel completo con header, tarjeta de bienvenida y tarjeta de actividad reciente.
+
+- En el navegador, haz clic en "Nuevo proyecto" — llama a `handleCreateProject` definido en `App.tsx`; observa cómo el callback sube del nieto al abuelo sin que los intermedios lo procesen
+- En `UserDashboardPanel.tsx`, añade un tercer `<ContentCard title="Tareas pendientes">` con una lista `<ul>` hardcodeada de tres tareas
+- En `UserDashboardPanel.tsx`, cambia `currentUser.fullName` a `currentUser.fullName.split(' ')[0]` en el saludo de la tarjeta — muestra solo el primer nombre
+- En `UserDashboardPanel.tsx`, añade `isAdmin?: boolean` a la interfaz `CurrentUser` y condiciona un badge `"Admin"` en el header; en `App.tsx` pasa `currentUser={{ fullName: 'Ana García', role: 'Administradora', isAdmin: true }}`
+- Observa el árbol de imports: `App → UserDashboardPanel → { UserSessionHeader → { UserAvatar, ActionButton }, ContentCard, ActionButton }` — cada componente importa explícitamente sus hijos
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import UserDashboardPanel from './components/UserDashboardPanel'
+```
+
+```tsx
+PASO === 5 ? (
+  <UserDashboardPanel
+    currentUser={{ fullName: 'Ana García', role: 'Administradora' }}
+    onLogout={() => alert('Sesión cerrada. Redirigiendo al login...')}
+    onCreateProject={() => alert('Abriendo formulario de nuevo proyecto...')}
+  />
+) :
+```
+
+Cambia `PASO = 5` y guarda.
 
 ---
 
-### `src/App.tsx` — navegador de pasos
+### `src/components/RatingStars.tsx`
 
 ```tsx
-// src/App.tsx
+// src/components/RatingStars.tsx
+// No usa tipos React.* → no necesita importar React
 
-import UserAvatar          from './components/UserAvatar'
-import ActionButton        from './components/ActionButton'
-import ContentCard         from './components/ContentCard'
-import UserSessionHeader   from './components/UserSessionHeader'
-import UserDashboardPanel  from './components/UserDashboardPanel'
-import CatalogProductItem  from './components/CatalogProductItem'
-import ShoppingCartSummary from './components/ShoppingCartSummary'
+interface RatingStarsProps {
+  rating: number
+  onRate: (value: number) => void
+  label?: string
+}
 
-// ┌──────────────────────────────────────────────────────────────────────┐
-// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
-// │  1  UserAvatar           — avatar con iniciales o imagen            │
-// │  2  ActionButton         — botón tipado con variantes               │
-// │  3  ContentCard          — composición con children                 │
-// │  4  UserSessionHeader    — UserAvatar + ActionButton                │
-// │  5  UserDashboardPanel   — panel completo integrado                 │
-// │  6  CatalogProductItem   — item con callback onAddToCart            │
-// │  7  ShoppingCartSummary  — resumen con callback onClearCart         │
-// └──────────────────────────────────────────────────────────────────────┘
-const PASO = 1
-
-const catalog = [
-  { id: 1, name: 'Teclado mecánico',  price: 89.99 },
-  { id: 2, name: 'Monitor 27"',       price: 349.99 },
-  { id: 3, name: 'Mouse inalámbrico', price: 29.99 },
-]
-
-const cartItems = [
-  { id: 2, name: 'Monitor 27"', price: 349.99 },
-]
-
-export default function App() {
-  function handleLogout(): void {
-    alert('Sesión cerrada. Redirigiendo al login...')
-  }
-
-  function handleCreateProject(): void {
-    alert('Abriendo formulario de nuevo proyecto...')
-  }
-
-  const content =
-    PASO === 1 ? <UserAvatar fullName="Ana García" size={64} /> :
-    PASO === 2 ? (
-      <div style={{ display: 'flex', gap: 8 }}>
-        <ActionButton label="Primario"   onAction={() => alert('primario')} />
-        <ActionButton label="Secundario" onAction={() => {}} variant="secondary" />
-        <ActionButton label="Peligro"    onAction={() => {}} variant="danger" />
-        <ActionButton label="Desactivado" onAction={() => {}} disabled />
-      </div>
-    ) :
-    PASO === 3 ? (
-      <ContentCard title="Sección de ejemplo">
-        <p>Este párrafo es el children de ContentCard.</p>
-        <ActionButton label="Acción" onAction={() => alert('click')} />
-      </ContentCard>
-    ) :
-    PASO === 4 ? (
-      <UserSessionHeader
-        fullName="Ana García"
-        role="Administradora"
-        onLogout={handleLogout}
-      />
-    ) :
-    PASO === 5 ? (
-      <UserDashboardPanel
-        currentUser={{ fullName: 'Ana García', role: 'Administradora' }}
-        onLogout={handleLogout}
-        onCreateProject={handleCreateProject}
-      />
-    ) :
-    PASO === 6 ? (
-      <section>
-        {catalog.map((p) => (
-          <CatalogProductItem
-            key={p.id}
-            id={p.id}
-            name={p.name}
-            price={p.price}
-            onAddToCart={(id, name, price) => alert(`Agregado: ${name} — $${price}`)}
-          />
-        ))}
-      </section>
-    ) :
-    PASO === 7 ? (
-      <ShoppingCartSummary
-        items={cartItems}
-        onClearCart={() => alert('Carrito vaciado')}
-      />
-    ) :
-    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
-
+export default function RatingStars({
+  rating,
+  onRate,
+  label,
+}: RatingStarsProps) {
   return (
-    <main style={{ maxWidth: 560, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
-      {content}
-    </main>
+    <div style={{ marginBottom: 12 }}>
+      {label && (
+        <p style={{ margin: '0 0 6px', fontSize: 14, color: '#555' }}>{label}</p>
+      )}
+      <div style={{ display: 'flex', gap: 4 }}>
+        {[1, 2, 3, 4, 5].map((star) => (
+          <button
+            key={star}
+            aria-label={`Dar ${star} estrella${star > 1 ? 's' : ''}`}
+            onClick={() => onRate(star)}
+            style={{
+              fontSize: 28,
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: star <= rating ? '#f59e0b' : '#d1d5db',
+              padding: 0,
+            }}
+          >
+            ★
+          </button>
+        ))}
+      </div>
+      <p style={{ margin: '6px 0 0', fontSize: 13, color: '#888' }}>
+        {rating > 0 ? `${rating} / 5 estrellas` : 'Sin valorar'}
+      </p>
+    </div>
   )
 }
 ```
+
+### Prueba esto
+
+> Establece `const PASO = 6` en `App.tsx` y guarda — verás las 5 estrellas con la primera resaltada; haz clic en cualquier estrella y revisa la consola.
+
+- En `App.tsx` (PASO 6), cambia `rating={1}` a `rating={4}` — cuatro estrellas se muestran en amarillo; `star <= rating` decide el color en cada iteración del `.map()`
+- En `App.tsx`, cambia `onRate={(n) => console.log('rating:', n)}` a `onRate={(n) => alert(\`Valoraste con ${n} estrellas\`)}` — la función anónima sigue siendo el padre quien decide qué hacer con el valor
+- En `RatingStars.tsx`, cambia `fontSize: 28` a `40` — las estrellas crecen sin cambiar nada en `App.tsx`
+- En `RatingStars.tsx`, cambia `star <= rating` a `star === rating` — solo la estrella exacta se ilumina; ilustra cómo la lógica interna no afecta la interfaz del componente
+- Añade `label="Valora este producto:"` al `<RatingStars>` de `App.tsx` — el párrafo de etiqueta aparece sobre las estrellas gracias a la condición `{label && ...}`
+- Observa que `RatingStars` no tiene estado propio: es un componente **controlado** — el padre lleva el valor actual (`rating`) y el hijo notifica cambios a través de `onRate`
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import RatingStars from './components/RatingStars'
+```
+
+```tsx
+PASO === 6 ? (
+  <RatingStars
+    rating={1}
+    onRate={(n) => console.log('rating:', n)}
+    label="Valora este producto:"
+  />
+) :
+```
+
+Cambia `PASO = 6` y guarda.
+
+---
+
+### `src/components/ConfirmDialog.tsx`
+
+```tsx
+// src/components/ConfirmDialog.tsx
+// No usa tipos React.* → no necesita importar React
+
+interface ConfirmDialogProps {
+  message: string
+  onConfirm: () => void
+  onCancel: () => void
+  confirmLabel?: string
+  cancelLabel?: string
+}
+
+export default function ConfirmDialog({
+  message,
+  onConfirm,
+  onCancel,
+  confirmLabel = 'Confirmar',
+  cancelLabel  = 'Cancelar',
+}: ConfirmDialogProps) {
+  return (
+    <div
+      style={{
+        border: '1px solid #ddd',
+        borderRadius: 10,
+        padding: 20,
+        maxWidth: 360,
+      }}
+    >
+      <p style={{ margin: '0 0 16px', fontSize: 15 }}>{message}</p>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <button
+          onClick={onCancel}
+          style={{
+            padding: '8px 16px',
+            borderRadius: 6,
+            border: '1px solid #ddd',
+            backgroundColor: '#f5f5f5',
+            cursor: 'pointer',
+          }}
+        >
+          {cancelLabel}
+        </button>
+        <button
+          onClick={onConfirm}
+          style={{
+            padding: '8px 16px',
+            borderRadius: 6,
+            border: 'none',
+            backgroundColor: '#e00',
+            color: '#fff',
+            cursor: 'pointer',
+          }}
+        >
+          {confirmLabel}
+        </button>
+      </div>
+    </div>
+  )
+}
+```
+
+### Prueba esto
+
+> Establece `const PASO = 7` en `App.tsx` y guarda — verás el diálogo de confirmación con dos botones; haz clic en cada uno y observa los mensajes en la consola.
+
+- En `App.tsx` (PASO 7), cambia `onConfirm={() => console.log('confirmado')}` a `onConfirm={() => alert('¡Acción realizada!')}` — el hijo llama a la función, pero el padre decide la consecuencia
+- En `App.tsx`, pasa `confirmLabel="Sí, eliminar"` y `cancelLabel="No, volver"` — los textos de los botones cambian sin tocar el componente
+- En `ConfirmDialog.tsx`, cambia `backgroundColor: '#e00'` a `'#16a34a'` en el botón de confirmar — el botón se vuelve verde; útil cuando la acción es positiva (p. ej., "Guardar cambios")
+- En `ConfirmDialog.tsx`, añade `title?: string` a las props y renderiza un `<h3 style={{ margin: '0 0 8px' }}>` antes del `<p>` cuando esté presente; en `App.tsx` pasa `title="Confirmar eliminación"`
+- Observa que `ConfirmDialog` tiene **dos** funciones como props distintas: `onConfirm` y `onCancel`; cada una con su propio tipo `() => void` — el componente no sabe qué hace cada una, solo las llama
+- Desde aquí puedes volver a cualquier PASO anterior cambiando el número y guardando.
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import ConfirmDialog from './components/ConfirmDialog'
+```
+
+```tsx
+PASO === 7 ? (
+  <ConfirmDialog
+    message="¿Seguro que quieres eliminar este elemento?"
+    onConfirm={() => console.log('confirmado')}
+    onCancel={() => console.log('cancelado')}
+  />
+) :
+```
+
+Cambia `PASO = 7` y guarda.
 
 ---
 
@@ -552,8 +732,7 @@ export default function App() {
 
 ```
 App
- ├─ imports: UserDashboardPanel
- ├─ define: handleLogout, handleCreateProject
+ ├─ imports: UserDashboardPanel, RatingStars, ConfirmDialog
  └─ UserDashboardPanel
       ├─ imports: UserSessionHeader, ContentCard, ActionButton
       ├─ UserSessionHeader
@@ -569,151 +748,74 @@ App
 
 ## Ejercicio de la página 3
 
-**Objetivo**: practicar funciones como props, callbacks con datos, eventos tipados y composición.
+**Objetivo**: practicar funciones como props, callbacks tipados y composición de componentes.
 
 ### Enunciado
 
-Construye un sistema de carrito de compras mínimo con tres componentes.
+Construye un sistema de valoraciones usando los dos componentes de la página.
 
-**`CatalogProductItem`** — muestra un producto con botón "Agregar":
-- Props: `id: number`, `name: string`, `price: number`, `onAddToCart: (id: number, name: string, price: number) => void`
-- Al hacer clic llama a `onAddToCart` con los datos del producto.
-
-**`ShoppingCartSummary`** — muestra los items del carrito:
-- Props: `items: Array<{ id: number, name: string, price: number }>`, `onClearCart: () => void`
-- Muestra cada item, el total calculado y un botón "Vaciar carrito".
+**`FeedbackCard`** — muestra un producto con su valoración actual:
+- Props: `name: string`, `rating: number`, `onRate: (n: number) => void`, `onDelete: () => void`
+- Renderiza el nombre del producto, un `<RatingStars>` y un botón "✕" que llama a `onDelete`.
 
 **`App`** — orquesta todo:
-- Mantiene por ahora un array hardcodeado de items (en la página 4 será dinámico con `useState`).
-- Define `handleAddToCart` y `handleClearCart` con `console.log` por ahora.
+- Define un array `products` con tres productos (id, name, rating).
+- Renderiza un `<FeedbackCard>` por producto.
+- Bajo los productos, renderiza un `<ConfirmDialog>` con el mensaje "¿Borrar historial de valoraciones?".
+- Los callbacks solo hacen `console.log` por ahora.
 
 ### Solución de referencia
 
 ```tsx
-// src/components/CatalogProductItem.tsx
+// src/components/FeedbackCard.tsx
 // No usa tipos React.* → no necesita importar React
 
-interface CatalogProductItemProps {
-  id: number
+import RatingStars from './RatingStars'
+
+interface FeedbackCardProps {
   name: string
-  price: number
-  onAddToCart: (id: number, name: string, price: number) => void
+  rating: number
+  onRate: (n: number) => void
+  onDelete: () => void
 }
 
-export default function CatalogProductItem({
-  id,
+export default function FeedbackCard({
   name,
-  price,
-  onAddToCart,
-}: CatalogProductItemProps) {
+  rating,
+  onRate,
+  onDelete,
+}: FeedbackCardProps) {
   return (
     <div
       style={{
+        border: '1px solid #eee',
+        borderRadius: 8,
+        padding: 16,
+        marginBottom: 12,
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '12px 0',
-        borderBottom: '1px solid #eee',
+        alignItems: 'flex-start',
+        gap: 12,
       }}
     >
-      <div>
-        <p style={{ margin: 0, fontWeight: 500 }}>{name}</p>
-        <p style={{ margin: 0, fontSize: 13, color: '#888' }}>${price.toFixed(2)}</p>
+      <div style={{ flexGrow: 1 }}>
+        <p style={{ margin: '0 0 8px', fontWeight: 500 }}>{name}</p>
+        <RatingStars rating={rating} onRate={onRate} />
       </div>
       <button
-        onClick={() => onAddToCart(id, name, price)}
+        onClick={onDelete}
         style={{
-          backgroundColor: '#0070f3',
-          color: '#fff',
+          background: 'none',
           border: 'none',
-          borderRadius: 6,
-          padding: '6px 14px',
+          color: '#e00',
           cursor: 'pointer',
+          fontSize: 18,
+          padding: 4,
         }}
+        aria-label={`Eliminar ${name}`}
       >
-        + Agregar
+        ✕
       </button>
-    </div>
-  )
-}
-```
-
-```tsx
-// src/components/ShoppingCartSummary.tsx
-// No usa tipos React.* → no necesita importar React
-
-interface CartItem {
-  id: number
-  name: string
-  price: number
-}
-
-interface ShoppingCartSummaryProps {
-  items: CartItem[]
-  onClearCart: () => void
-}
-
-export default function ShoppingCartSummary({
-  items,
-  onClearCart,
-}: ShoppingCartSummaryProps) {
-  const total = items.reduce((acc, item) => acc + item.price, 0)
-
-  return (
-    <div
-      style={{
-        border: '1px solid #ddd',
-        borderRadius: 10,
-        padding: 16,
-        marginTop: 24,
-      }}
-    >
-      <h3 style={{ marginTop: 0 }}>Carrito ({items.length} items)</h3>
-
-      {items.length === 0 && (
-        <p style={{ color: '#999' }}>El carrito está vacío.</p>
-      )}
-
-      <ul style={{ listStyle: 'none', padding: 0 }}>
-        {items.map((item) => (
-          <li
-            key={item.id}
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              padding: '6px 0',
-            }}
-          >
-            <span>{item.name}</span>
-            <span>${item.price.toFixed(2)}</span>
-          </li>
-        ))}
-      </ul>
-
-      {items.length > 0 && (
-        <>
-          <hr />
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
-            <span>Total</span>
-            <span>${total.toFixed(2)}</span>
-          </div>
-          <button
-            onClick={onClearCart}
-            style={{
-              marginTop: 12,
-              backgroundColor: '#e00',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 6,
-              padding: '8px 16px',
-              cursor: 'pointer',
-              width: '100%',
-            }}
-          >
-            Vaciar carrito
-          </button>
-        </>
-      )}
     </div>
   )
 }
@@ -723,73 +825,48 @@ export default function ShoppingCartSummary({
 // src/App.tsx
 // No usa tipos React.* → no necesita importar React
 
-import CatalogProductItem  from './components/CatalogProductItem'
-import ShoppingCartSummary from './components/ShoppingCartSummary'
+import FeedbackCard  from './components/FeedbackCard'
+import ConfirmDialog from './components/ConfirmDialog'
 
-interface CartItem {
-  id: number
-  name: string
-  price: number
-}
-
-// Array estático por ahora — se vuelve dinámico con useState en la página 4
-const cartItems: CartItem[] = [
-  { id: 2, name: 'Monitor 27"', price: 349.99 },
-]
-
-const catalog = [
-  { id: 1, name: 'Teclado mecánico',  price: 89.99 },
-  { id: 2, name: 'Monitor 27"',       price: 349.99 },
-  { id: 3, name: 'Mouse inalámbrico', price: 29.99 },
+const products = [
+  { id: 1, name: 'Teclado mecánico',  rating: 4 },
+  { id: 2, name: 'Monitor 27"',       rating: 5 },
+  { id: 3, name: 'Mouse inalámbrico', rating: 3 },
 ]
 
 export default function App() {
-
-  function handleAddToCart(id: number, name: string, price: number): void {
-    console.log(`Agregando: [${id}] ${name} — $${price}`)
-    // Página 4: setCartItems(prev => [...prev, { id, name, price }])
-  }
-
-  function handleClearCart(): void {
-    console.log('Vaciando carrito...')
-    // Página 4: setCartItems([])
-  }
-
   return (
     <main style={{ maxWidth: 480, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
-      <h1 style={{ fontSize: 22 }}>Tienda</h1>
+      <h1 style={{ fontSize: 22 }}>Valoraciones</h1>
 
-      <section>
-        {catalog.map((product) => (
-          <CatalogProductItem
-            key={product.id}
-            id={product.id}
-            name={product.name}
-            price={product.price}
-            onAddToCart={handleAddToCart}
-          />
-        ))}
-      </section>
+      {products.map((p) => (
+        <FeedbackCard
+          key={p.id}
+          name={p.name}
+          rating={p.rating}
+          onRate={(n) => console.log(`${p.name}: ${n} ★`)}
+          onDelete={() => console.log(`Eliminar: ${p.name}`)}
+        />
+      ))}
 
-      <ShoppingCartSummary
-        items={cartItems}
-        onClearCart={handleClearCart}
+      <ConfirmDialog
+        message="¿Borrar historial de valoraciones?"
+        confirmLabel="Sí, borrar"
+        onConfirm={() => console.log('Historial borrado')}
+        onCancel={() => console.log('Cancelado')}
       />
     </main>
   )
 }
 ```
 
-> **Nota**: el carrito aún no es interactivo. En la página 4 retomamos este ejercicio
-> y lo hacemos completamente funcional con `useState`.
-
 ### Prueba esto
 
-- Abre la consola del navegador (F12) y haz clic en "Agregar" en varios productos — verás los `console.log` del `handleAddToCart` con el id, nombre y precio
-- Cambia `cartItems` a `[]` — el `ShoppingCartSummary` muestra el mensaje "El carrito está vacío." y oculta el total y el botón
-- Añade `{ id: 3, name: 'Mouse inalámbrico', price: 29.99 }` a `cartItems` — el total se recalcula automáticamente con `.reduce()`
-- Añade `quantity?: number` a `CartItem` en `ShoppingCartSummary` y muéstralo en cada fila: `{item.quantity ?? 1} × {item.name}`
-- Cambia el color del botón "Agregar" en `CatalogProductItem` de `'#0070f3'` a `'#16a34a'` — el cambio aplica a todos los botones de la lista
+- Abre la consola (F12 → Console) y haz clic en distintas estrellas de cada producto — verás `nombre: N ★` en la consola; `onRate` llega desde `App` pasando por `FeedbackCard` hasta `RatingStars`
+- Haz clic en "✕" en cualquier `FeedbackCard` — la consola muestra `Eliminar: nombre`; la acción real (quitar del array) la implementaremos con `useState` en la página 4
+- Haz clic en "Sí, borrar" en el `ConfirmDialog` — el callback `onConfirm` es definido en `App` y llega al componente como prop
+- En `App.tsx`, añade `confirmLabel="Sí, eliminar todo"` al `<ConfirmDialog>` — el texto del botón cambia sin tocar el componente
+- Observa cómo `FeedbackCard` importa `RatingStars` pero **no sabe nada sobre el padre** — el padre pasa los callbacks, el hijo los llama; esa es la clave de la comunicación unidireccional
 
 ---
 
@@ -806,4 +883,4 @@ export default function App() {
 ---
 
 > **Siguiente página →** `useState` en profundidad: tipos inferidos vs explícitos,
-> estado con objetos y arrays, y el carrito de esta página hecho completamente funcional.
+> estado con objetos y arrays, y un carrito de compras completamente funcional.

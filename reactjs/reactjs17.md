@@ -256,6 +256,34 @@ export default function PostList() {
 - Abre DevTools Network, recarga la página y observa la única petición a `jsonplaceholder`; cambia de tab y vuelve — aparece una segunda petición de re-validación después de los 5 minutos de `staleTime`
 - Añade `refetchInterval: 3000` a las opciones de `useQuery` — observa "Actualizando..." aparecer cada 3 segundos sin interacción del usuario
 
+### `src/App.tsx`
+
+```tsx
+// src/App.tsx
+
+import PostList from './components/PostList'
+// ┌──────────────────────────────────────────────────────────────────────┐
+// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
+// │  1  PostList           — useQuery, lista con caché y skeleton       │
+// │  2  PostDetail         — useQuery con parámetro y enabled           │
+// │  3  CreatePostForm     — useMutation con invalidateQueries          │
+// │  4  PostListWithDelete — useMutation con actualización optimista     │
+// │  5  PaginatedPosts     — paginación con keepPreviousData            │
+// └──────────────────────────────────────────────────────────────────────┘
+const PASO = 1
+
+export default function App() {
+  const content = PASO === 1 ? <PostList /> :
+    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
+
+  return (
+    <main style={{ maxWidth: 600, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
+      {content}
+    </main>
+  )
+}
+```
+
 ---
 
 ### `src/components/PostDetail.tsx`
@@ -302,6 +330,18 @@ export default function PostDetail({ postId }: PostDetailProps) {
 - Cambia `staleTime: 10 * 60 * 1000` a `staleTime: 0` — navega entre posts y vuelve al primero; observa que cada visita dispara una nueva petición de red
 - Añade `retry: 5` a las opciones — modifica `fetchPost` para lanzar un error y observa en consola los 5 reintentos antes de mostrar el mensaje de error
 - Cambia `queryKey: ['post', postId]` a `queryKey: ['post']` — todos los posts comparten la misma entrada del caché; seleccionar post 2 sobreescribe los datos del post 1
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import PostDetail from './components/PostDetail'
+```
+
+```tsx
+PASO === 2 ? <PostDetail postId={1} /> :
+```
+
+Cambia `PASO = 2` y guarda.
 
 ---
 
@@ -403,6 +443,18 @@ export default function CreatePostForm() {
 - Cambia `userId: 1` a `userId: 999` en `mutation.mutate(...)` — el post se crea igualmente; `jsonplaceholder` acepta cualquier userId
 - Añade `onSettled: () => console.log('Mutation terminada')` — observa en consola que se ejecuta tanto en éxito como en error
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import CreatePostForm from './components/CreatePostForm'
+```
+
+```tsx
+PASO === 3 ? <CreatePostForm /> :
+```
+
+Cambia `PASO = 3` y guarda.
+
 ---
 
 ### `src/components/PostListWithDelete.tsx`
@@ -496,6 +548,18 @@ export default function PostListWithDelete() {
 - Elimina `await queryClient.cancelQueries(...)` del `onMutate` — si hay un re-fetch en curso cuando eliminas, puede sobreescribir el estado optimista y el item reaparecería brevemente
 - Añade `console.log('onMutate', deletedId)` en `onMutate` y `console.log('onSettled')` en `onSettled` — observa el orden de ejecución: onMutate → (petición) → onSettled
 - Cambia `onSettled` para que llame a `invalidateQueries` con `queryKey: ['posts', 'paginated', 1]` en lugar de `['posts']` — la lista principal no se re-valida; el caché de paginación tampoco
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import PostListWithDelete from './components/PostListWithDelete'
+```
+
+```tsx
+PASO === 4 ? <PostListWithDelete /> :
+```
+
+Cambia `PASO = 4` y guarda.
 
 ---
 
@@ -594,46 +658,19 @@ function pageBtn(disabled: boolean): React.CSSProperties {
 - Cambia `opacity: isPlaceholderData ? 0.6 : 1` a `opacity: isPlaceholderData ? 0.2 : 1` — la transición entre páginas es visualmente más obvia
 - Añade `staleTime: 0` — navega adelante y atrás entre páginas y observa en Network que cada visita a una página ya cacheada dispara una petición de re-validación en background
 - Desactiva el botón "Siguiente" con `disabled={!posts || posts.length < PAGE_SIZE}` en lugar de `disabled={isPlaceholderData}` — el botón se deshabilita cuando la última página tiene menos posts que `PAGE_SIZE`
+- Desde aquí puedes volver a cualquier PASO anterior cambiando el número y guardando.
 
----
-
-## `src/App.tsx`
+### Agrega a `src/App.tsx`
 
 ```tsx
-// src/App.tsx
-
-import PostList           from './components/PostList'
-import PostDetail         from './components/PostDetail'
-import CreatePostForm     from './components/CreatePostForm'
-import PostListWithDelete from './components/PostListWithDelete'
-import PaginatedPosts     from './components/PaginatedPosts'
-
-// ┌──────────────────────────────────────────────────────────────────────┐
-// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
-// │  1  PostList           — useQuery, lista con caché y skeleton       │
-// │  2  PostDetail         — useQuery con parámetro y enabled           │
-// │  3  CreatePostForm     — useMutation con invalidateQueries          │
-// │  4  PostListWithDelete — useMutation con actualización optimista     │
-// │  5  PaginatedPosts     — paginación con keepPreviousData            │
-// └──────────────────────────────────────────────────────────────────────┘
-const PASO = 1
-
-export default function App() {
-  const content =
-    PASO === 1 ? <PostList /> :
-    PASO === 2 ? <PostDetail postId={1} /> :
-    PASO === 3 ? <CreatePostForm /> :
-    PASO === 4 ? <PostListWithDelete /> :
-    PASO === 5 ? <PaginatedPosts /> :
-    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
-
-  return (
-    <main style={{ maxWidth: 600, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
-      {content}
-    </main>
-  )
-}
+import PaginatedPosts from './components/PaginatedPosts'
 ```
+
+```tsx
+PASO === 5 ? <PaginatedPosts /> :
+```
+
+Cambia `PASO = 5` y guarda.
 
 ---
 

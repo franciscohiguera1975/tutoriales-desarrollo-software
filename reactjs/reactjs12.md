@@ -158,6 +158,32 @@ export default function PostListBasic() {
 - Añade `console.log('fetching...')` antes del `await fetch(...)` y monta/desmonta el componente rápidamente — confirma que el flag `cancelled` evita actualizaciones de estado tras el desmontaje
 - Cambia el tipo `Post[]` a `Post` (singular) en `await res.json()` sin cambiar la URL — TypeScript no lanza error en tiempo de compilación porque `json()` devuelve `any`; observa los errores en runtime al intentar usar `.map`
 
+### `src/App.tsx`
+
+```tsx
+// src/App.tsx
+
+import PostListBasic from './components/PostListBasic'
+
+// ┌──────────────────────────────────────────────────────────────────────┐
+// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
+// │  1  PostListBasic — fetch directo en useEffect                      │
+// └──────────────────────────────────────────────────────────────────────┘
+const PASO = 1
+
+export default function App() {
+  const content =
+    PASO === 1 ? <PostListBasic /> :
+    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
+
+  return (
+    <main style={{ maxWidth: 600, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
+      {content}
+    </main>
+  )
+}
+```
+
 ---
 
 ## 2. Cliente `fetch` centralizado y tipado
@@ -359,6 +385,18 @@ export default function UserListWithRefetch() {
 - Añade un timestamp del último fetch junto al botón usando `Date.now()` — observa que se actualiza cada vez que se llama a `refetch`
 - Simula un error pasando una URL inválida y haz clic en "↺ Recargar" — verifica que el estado `error` se actualiza y `loading` vuelve a `false` correctamente
 
+### Agrega a `src/App.tsx`
+
+```tsx
+import UserListWithRefetch from './components/UserListWithRefetch'
+```
+
+```tsx
+    PASO === 2 ? <UserListWithRefetch /> :
+```
+
+Cambia `PASO = 2` y guarda.
+
 ---
 
 ## 4. `usePagination` — hook de paginación reutilizable
@@ -515,6 +553,18 @@ function pgBtn(disabled: boolean): React.CSSProperties {
 - Haz clic en "← Ant." cuando estás en la primera página — observa que el botón está desactivado y `canGoPrev` es `false`
 - Pasa `totalItems: 0` al hook — verifica que `totalPages` devuelve `1` (no `0`) gracias a `Math.max(1, ...)` y no aparecen páginas negativas
 - Conecta `usePagination` con un array local de strings en lugar de datos del servidor — confirma que el hook es agnóstico al origen de los datos y funciona igual
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import PaginatedUserList from './components/PaginatedUserList'
+```
+
+```tsx
+    PASO === 3 ? <PaginatedUserList /> :
+```
+
+Cambia `PASO = 3` y guarda.
 
 ---
 
@@ -731,6 +781,19 @@ export default function PostCrudWithAxios() {
 - Crea un post y recarga la página — comprueba que el post creado desaparece, ya que `jsonplaceholder` no guarda los datos entre sesiones
 - Intenta crear un post mientras `saving` es `true` (haz doble clic muy rápido en "Crear") — verifica que el botón queda desactivado durante la petición y no se envían duplicados
 - Modifica `handleDelete` para que muestre un `window.confirm` antes de eliminar — observa que el flujo asíncrono funciona igual dentro del `try/catch`
+- Desde aquí puedes volver a cualquier PASO anterior cambiando el número y guardando.
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import PostCrudWithAxios from './components/PostCrudWithAxios'
+```
+
+```tsx
+    PASO === 4 ? <PostCrudWithAxios /> :
+```
+
+Cambia `PASO = 4` y guarda.
 
 ---
 
@@ -774,43 +837,6 @@ interface ImportMetaEnv {
 
 interface ImportMeta {
   readonly env: ImportMetaEnv
-}
-```
-
----
-
-## `src/App.tsx`
-
-```tsx
-// src/App.tsx
-
-import PostListBasic       from './components/PostListBasic'
-import UserListWithRefetch from './components/UserListWithRefetch'
-import PaginatedUserList   from './components/PaginatedUserList'
-import PostCrudWithAxios   from './components/PostCrudWithAxios'
-
-// ┌──────────────────────────────────────────────────────────────────────┐
-// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
-// │  1  PostListBasic       — fetch directo en useEffect                │
-// │  2  UserListWithRefetch — useFetchData con refetch manual           │
-// │  3  PaginatedUserList   — paginación con usePagination              │
-// │  4  PostCrudWithAxios   — CRUD completo con axios                   │
-// └──────────────────────────────────────────────────────────────────────┘
-const PASO = 1
-
-export default function App() {
-  const content =
-    PASO === 1 ? <PostListBasic /> :
-    PASO === 2 ? <UserListWithRefetch /> :
-    PASO === 3 ? <PaginatedUserList /> :
-    PASO === 4 ? <PostCrudWithAxios /> :
-    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
-
-  return (
-    <main style={{ maxWidth: 600, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
-      {content}
-    </main>
-  )
 }
 ```
 

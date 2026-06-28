@@ -455,9 +455,9 @@ export default function MyComponent() {
 | Sin anotación | ninguno | Componentes simples sin otras dependencias de React |
 
 ---
-## Navegador de pasos — `App.tsx`
+## `src/App.tsx`
 
-A partir de la siguiente página el proyecto acumulará varios componentes. Para navegar entre ellos sin cambiar la URL, el curso usa una constante `PASO` en `App.tsx` — idéntica al patrón `const int paso = 1` del módulo Flutter:
+El proyecto usa una constante `PASO` para navegar entre componentes sin cambiar la URL — idéntica al patrón `const int paso = 1` del módulo Flutter. Cambia `PASO` y guarda (`Ctrl+S`) para ver cada componente en el navegador.
 
 ```tsx
 // src/App.tsx

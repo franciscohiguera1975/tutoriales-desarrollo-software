@@ -89,7 +89,7 @@ function reducer(state: State, action: CounterAction): State {
 
 ---
 
-## `src/components/BasicCounter.tsx`
+## PASO 1 — `src/components/BasicCounter.tsx`
 
 El ejemplo más simple: `useReducer` con 4 acciones, una de ellas con `payload`.
 
@@ -171,6 +171,34 @@ const btnStyle: React.CSSProperties = {
 }
 ```
 
+### `src/App.tsx`
+
+```tsx
+// src/App.tsx
+
+import BasicCounter from './components/BasicCounter'
+
+// ┌──────────────────────────────────────────────────────────────────────┐
+// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
+// │  1  BasicCounter      — useReducer básico con acciones tipadas      │
+// │  2  RegistrationForm  — formulario con validación y estados de envío│
+// │  3  ShoppingCart      — carrito de compras completo                 │
+// └──────────────────────────────────────────────────────────────────────┘
+const PASO = 1
+
+export default function App() {
+  const content =
+    PASO === 1 ? <BasicCounter /> :
+    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
+
+  return (
+    <main style={{ maxWidth: 600, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
+      {content}
+    </main>
+  )
+}
+```
+
 ### Prueba esto
 
 - Pulsa `+` varias veces — el contador sube de uno en uno; observa que cada dispatch pasa por el reducer antes de actualizar la vista
@@ -182,7 +210,7 @@ const btnStyle: React.CSSProperties = {
 
 ---
 
-## `src/components/RegistrationForm.tsx`
+## PASO 2 — `src/components/RegistrationForm.tsx`
 
 Formulario con validación y estados de envío. Un único `useReducer` gestiona
 campos, errores y status del envío — todo consistente en cada transición.
@@ -381,6 +409,18 @@ const errorStyle: React.CSSProperties = {
 - Envía el formulario correctamente — aparece el banner verde y los campos se vacían; esto ocurre porque `SUBMIT_SUCCESS` retorna `{ ...INITIAL_STATE, status: 'success' }` en lugar del estado actual
 - Cambia el email de validación de `!state.email.includes('@')` a una regex más estricta — observa cómo la lógica de validación queda solo en la función `validate` sin afectar el reducer
 - Añade la acción `| { type: 'SUBMIT_ERROR' }` al flujo haciendo que `handleSubmit` despache `SUBMIT_ERROR` si el email termina en `@fail.com`; observa el estado `error` en la UI
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import RegistrationForm from './components/RegistrationForm'
+```
+
+```tsx
+PASO === 2 ? <RegistrationForm /> :
+```
+
+Cambia `PASO = 2` y guarda.
 
 ---
 
@@ -599,40 +639,19 @@ const qtyBtn: React.CSSProperties = {
 - Cambia el precio del Monitor de `349` a `0` en `PRODUCTS` — el total se recalcula automáticamente porque `total` usa `useMemo` derivado del estado del reducer
 - Añade un quinto producto al array `PRODUCTS` sin tocar el reducer ni el JSX — aparece en el catálogo de inmediato; el componente es genérico respecto a los datos
 - Observa el botón "Ver carrito" cuando el carrito está vacío vs. con items — el color cambia porque usa `itemCount > 0` como condición; prueba con exactamente 1 item para ver la transición
+- Desde aquí puedes volver a cualquier PASO anterior cambiando el número y guardando.
 
----
-
-## `src/App.tsx`
+### Agrega a `src/App.tsx`
 
 ```tsx
-// src/App.tsx
-
-import BasicCounter     from './components/BasicCounter'
-import RegistrationForm from './components/RegistrationForm'
-import ShoppingCart     from './components/ShoppingCart'
-
-// ┌──────────────────────────────────────────────────────────────────────┐
-// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
-// │  1  BasicCounter      — useReducer básico con acciones tipadas      │
-// │  2  RegistrationForm  — formulario con validación y estados de envío│
-// │  3  ShoppingCart      — carrito de compras completo                 │
-// └──────────────────────────────────────────────────────────────────────┘
-const PASO = 1
-
-export default function App() {
-  const content =
-    PASO === 1 ? <BasicCounter /> :
-    PASO === 2 ? <RegistrationForm /> :
-    PASO === 3 ? <ShoppingCart /> :
-    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
-
-  return (
-    <main style={{ maxWidth: 600, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
-      {content}
-    </main>
-  )
-}
+import ShoppingCart from './components/ShoppingCart'
 ```
+
+```tsx
+PASO === 3 ? <ShoppingCart /> :
+```
+
+Cambia `PASO = 3` y guarda.
 
 ---
 

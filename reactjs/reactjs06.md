@@ -113,6 +113,32 @@ export default function AutoFocusForm() {
 - Elimina el `ref={nameRef}` del primer `<input>` y guarda — el foco ya no funciona; `nameRef.current` sigue siendo `null` porque React no asignó ningún nodo a esa ref
 - Reemplaza `emailRef.current?.focus()` por `emailRef.current?.select()` si el campo de email ya tiene texto escrito — el texto queda seleccionado en vez de solo recibir el foco
 
+### `src/App.tsx`
+
+```tsx
+// src/App.tsx
+
+import AutoFocusForm from './components/AutoFocusForm'
+// ┌──────────────────────────────────────────────────────────────────────┐
+// │  1  AutoFocusForm    — useRef: foco automático y tecla Enter        │
+// │  2  Stopwatch        — useRef: interval sin re-renders extra        │
+// │  3  FilterableList   — useCallback: función estable para hijo       │
+// │  4  ProductAnalytics — useMemo: stats y filtro memoizados           │
+// └──────────────────────────────────────────────────────────────────────┘
+const PASO = 1
+
+export default function App() {
+  const content = PASO === 1 ? <AutoFocusForm /> :
+    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
+
+  return (
+    <main style={{ maxWidth: 500, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
+      {content}
+    </main>
+  )
+}
+```
+
 ---
 
 ### Uso 2 — Valor mutable sin re-render
@@ -235,6 +261,18 @@ function btnStyle(bg: string) {
 - Pulsa "Iniciar", deja correr hasta 65 segundos — el display cambia de `01:04` a `01:05`; verifica que el cálculo con `Math.floor(time / 60)` y `time % 60` funciona correctamente para minutos
 - Cambia `setTime((prev) => prev + 1)` por `setTime(time + 1)` — el cronómetro puede estancarse o comportarse incorrectamente porque `time` en el closure siempre tiene el valor del render donde se creó el interval; el updater funcional `(prev) => prev + 1` siempre opera sobre el valor más reciente
 - Agrega un botón "Vuelta" que guarde el tiempo actual en un array de `useState<number[]>([])` y muestre la lista de vueltas debajo — el array puede actualizarse con `setLaps(prev => [...prev, time])`
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import Stopwatch from './components/Stopwatch'
+```
+
+```tsx
+PASO === 2 ? <Stopwatch /> :
+```
+
+Cambia `PASO = 2` y guarda.
 
 ---
 
@@ -384,6 +422,18 @@ export default function FilterableList() {
 - Reemplaza `useCallback` con una función normal `function handleDelete(id: number) { ... }` — la funcionalidad es idéntica; la diferencia solo sería observable con `React.memo` en `ItemRow` y miles de filas
 - Escribe "cam" en el filtro — aparecen "Webcam 4K" (por nombre) y ningún otro; borra el filtro y todos los ítems vuelven porque el filtrado es solo visual, no elimina del estado
 - Agrega un campo `price: number` a la interfaz `Item` y a `INITIAL_ITEMS`, y muestra el precio en `ItemRow` con `$${item.price}` — observa que TypeScript exige que todos los objetos del array incluyan el nuevo campo
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import FilterableList from './components/FilterableList'
+```
+
+```tsx
+PASO === 3 ? <FilterableList /> :
+```
+
+Cambia `PASO = 3` y guarda.
 
 ---
 
@@ -535,6 +585,19 @@ export default function ProductAnalytics() {
 - Agrega un `console.log('recalculando filtered')` dentro del segundo `useMemo` y alterna el checkbox — el log aparece cada vez que cambia `onlyInStock` o `search`, confirmando que las dependencias están correctas
 - Reemplaza el primer `useMemo` con `[]` por una constante fuera del componente: `const STATS = { total: ..., ... }` calculada una vez al importar el módulo — para datos que nunca cambian es incluso mejor que `useMemo`, que tiene un pequeño overhead de comparación
 - Agrega un tercer `useMemo` que calcule el producto más caro del resultado filtrado: `const mostExpensive = useMemo(() => filtered.reduce((a, b) => a.price > b.price ? a : b, filtered[0]), [filtered])` — muestra su nombre encima de la lista; observa que depende de `filtered`, que ya es un valor memorizado
+- Desde aquí puedes volver a cualquier PASO anterior cambiando el número y guardando.
+
+### Agrega a `src/App.tsx`
+
+```tsx
+import ProductAnalytics from './components/ProductAnalytics'
+```
+
+```tsx
+PASO === 4 ? <ProductAnalytics /> :
+```
+
+Cambia `PASO = 4` y guarda.
 
 ---
 
@@ -589,52 +652,6 @@ const handleDelete = useCallback((id: number) => {
 > Regla práctica: **primero escribe sin `useCallback`/`useMemo`**.
 > Añádelos solo cuando puedas medir un problema real de rendimiento
 > o cuando pases funciones a componentes hijos optimizados con `React.memo`.
-
----
-
-## Navegador de pasos — `App.tsx`
-
-```tsx
-// src/App.tsx
-
-import AutoFocusForm    from './components/AutoFocusForm'
-import Stopwatch        from './components/Stopwatch'
-import FilterableList   from './components/FilterableList'
-import ProductAnalytics from './components/ProductAnalytics'
-
-// ┌──────────────────────────────────────────────────────────────────────┐
-// │  Cambia PASO y guarda (Ctrl+S) para navegar entre componentes.      │
-// │  1  AutoFocusForm    — useRef: foco automático y tecla Enter        │
-// │  2  Stopwatch        — useRef: interval sin re-renders extra        │
-// │  3  FilterableList   — useCallback: función estable para hijo       │
-// │  4  ProductAnalytics — useMemo: stats y filtro memoizados           │
-// └──────────────────────────────────────────────────────────────────────┘
-const PASO = 1
-
-export default function App() {
-  const content =
-    PASO === 1 ? <AutoFocusForm /> :
-    PASO === 2 ? <Stopwatch /> :
-    PASO === 3 ? <FilterableList /> :
-    PASO === 4 ? <ProductAnalytics /> :
-    <p style={{ color: '#e00' }}>Paso {PASO}: crea el componente primero</p>
-
-  return (
-    <main style={{ maxWidth: 500, margin: '40px auto', fontFamily: 'sans-serif', padding: '0 16px' }}>
-      {content}
-    </main>
-  )
-}
-```
-
-### Prueba esto
-
-- Cambia `PASO` a `2` y guarda — el cronómetro aparece; pulsa Iniciar, Pausar y Reset para verificar que el `intervalRef` se limpia correctamente
-- Cambia `PASO` a `3`, escribe "Peri" en el filtro — solo aparecen los ítems de categoría "Periféricos"; borra el filtro y vuelven todos
-- Cambia `PASO` a `4`, activa el checkbox "Solo en stock" y escribe en el buscador simultáneamente — ambos filtros se aplican a la vez con el segundo `useMemo`
-- Pon `PASO = 5` — aparece el mensaje de error en rojo; es la rama `else` del ternario encadenado
-- Vuelve a `PASO = 1` y pulsa Enter en el campo "Nombre" — el foco salta al campo "Email"; el auto-foco ocurre cada vez que React monta el componente
-- Cambia `maxWidth: 500` a `maxWidth: 800` — todos los componentes usan el espacio extra; `ProductAnalytics` con su grid de 4 columnas se beneficia más
 
 ---
 
